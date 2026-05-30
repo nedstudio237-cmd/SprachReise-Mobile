@@ -3,8 +3,8 @@
 // Option 1 — Même Wi-Fi que le PC :
 // export const API_BASE_URL = 'http://192.168.1.152:8090/api';
 
-// Option 2 — LTE / réseau différent (ngrok) : remplace l'URL ci-dessous
-export const API_BASE_URL = 'https://REMPLACE-PAR-TON-URL-NGROK.ngrok-free.app/api';
+// Option 2 — LTE (localtunnel actif) :
+export const API_BASE_URL = 'https://green-signs-stare.loca.lt/api';
 
 export const COLORS = {
   primary: '#7E663A',

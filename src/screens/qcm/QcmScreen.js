@@ -1,120 +1,140 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity,
+  ScrollView, ActivityIndicator, Modal,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
+import api from '../../services/api';
 
-const QUESTIONS = [
-  {
-    id: 1,
-    german: 'Wie heißt du?',
-    french: 'Comment tu t\'appelles ?',
-    level: 'A1',
-    options: [
-      { id: 'a', text: 'Ich heiße Marie.' },
-      { id: 'b', text: 'Ich bin gut.' },
-      { id: 'c', text: 'Ich komme aus Kamerun.' },
-      { id: 'd', text: 'Ich spreche Deutsch.' },
-    ],
-    correct: 'a',
-    explanation: '"Ich heiße" signifie "Je m\'appelle". C\'est la réponse correcte pour se présenter.',
-  },
-  {
-    id: 2,
-    german: 'Woher kommst du?',
-    french: 'D\'où viens-tu ?',
-    level: 'A1',
-    options: [
-      { id: 'a', text: 'Ich wohne in Berlin.' },
-      { id: 'b', text: 'Ich komme aus Kamerun.' },
-      { id: 'c', text: 'Ich bin zwanzig Jahre alt.' },
-      { id: 'd', text: 'Ich lerne Deutsch.' },
-    ],
-    correct: 'b',
-    explanation: '"Woher kommst du?" demande d\'où tu viens. "Ich komme aus..." signifie "Je viens de...".',
-  },
-  {
-    id: 3,
-    german: 'Was ist das?',
-    french: 'Qu\'est-ce que c\'est ?',
-    level: 'A1',
-    options: [
-      { id: 'a', text: 'Das bin ich.' },
-      { id: 'b', text: 'Er ist müde.' },
-      { id: 'c', text: 'Das ist ein Buch.' },
-      { id: 'd', text: 'Sie heißt Anna.' },
-    ],
-    correct: 'c',
-    explanation: '"Was ist das?" = "Qu\'est-ce que c\'est?" — "Das ist ein Buch" = "C\'est un livre".',
-  },
-  {
-    id: 4,
-    german: 'Wie alt bist du?',
-    french: 'Quel âge as-tu ?',
-    level: 'A1',
-    options: [
-      { id: 'a', text: 'Ich bin müde.' },
-      { id: 'b', text: 'Ich bin aus Paris.' },
-      { id: 'c', text: 'Ich bin Student.' },
-      { id: 'd', text: 'Ich bin zwanzig Jahre alt.' },
-    ],
-    correct: 'd',
-    explanation: '"Wie alt bist du?" demande ton âge. "Ich bin X Jahre alt" = "J\'ai X ans".',
-  },
-  {
-    id: 5,
-    german: 'Sprechen Sie Deutsch?',
-    french: 'Parlez-vous allemand ?',
-    level: 'A1',
-    options: [
-      { id: 'a', text: 'Ja, ein bisschen.' },
-      { id: 'b', text: 'Nein, ich bin müde.' },
-      { id: 'c', text: 'Ich wohne hier.' },
-      { id: 'd', text: 'Das ist gut.' },
-    ],
-    correct: 'a',
-    explanation: '"Sprechen Sie Deutsch?" = "Parlez-vous allemand?". La réponse logique est "Ja, ein bisschen" = "Oui, un peu".',
-  },
-];
+export default function QcmScreen({ route, navigation }) {
+  const levelId = route?.params?.levelId ?? 1;
+  const [qcm, setQcm] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-export default function QcmScreen({ navigation }) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
 
-  const question = QUESTIONS[currentIndex];
-  const progress = (currentIndex / QUESTIONS.length) * 100;
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiText, setAiText] = useState(null);
+  const [aiModalVisible, setAiModalVisible] = useState(false);
 
-  const handleSelect = (optionId) => {
+  useEffect(() => {
+    api.get('/qcm', { params: { levelId } })
+      .then(({ data }) => {
+        if (data.length > 0) {
+          const first = data[0];
+          setQcm(first);
+          setQuestions(first.questions ?? []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [levelId]);
+
+  const question = questions[currentIndex];
+  const progress = questions.length > 0 ? (currentIndex / questions.length) * 100 : 0;
+
+  const correctChoice = question?.choices?.find((c) => c.isCorrect);
+  const explanation = correctChoice?.explanation ?? '';
+
+  const handleSelect = useCallback((choiceId, isCorrect) => {
     if (showResult) return;
-    setSelectedAnswer(optionId);
+    setSelectedId(choiceId);
     setShowResult(true);
-    if (optionId === question.correct) {
-      setScore((s) => s + 1);
+    if (isCorrect) setScore((s) => s + 1);
+  }, [showResult]);
+
+  const handleNext = () => {
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((i) => i + 1);
+      setSelectedId(null);
+      setShowResult(false);
+      setAiText(null);
+    } else {
+      submitAndFinish();
     }
   };
 
-  const handleNext = () => {
-    if (currentIndex < QUESTIONS.length - 1) {
-      setCurrentIndex((i) => i + 1);
-      setSelectedAnswer(null);
-      setShowResult(false);
-    } else {
-      setFinished(true);
+  const submitAndFinish = async () => {
+    try {
+      await api.post(`/qcm/${qcm.id}/attempt`, {
+        score,
+        total: questions.length,
+        correct: score,
+        duration: 0,
+      });
+    } catch {}
+    setFinished(true);
+  };
+
+  const handleAskAI = async () => {
+    if (aiLoading || !question) return;
+    setAiLoading(true);
+    setAiText(null);
+    try {
+      const { data } = await api.post('/ai/explain', {
+        level: 'A1',
+        question: question.questionText,
+        context: explanation,
+        mode: 'explain',
+      });
+      setAiText(data.explanation);
+      setAiModalVisible(true);
+    } catch {
+      setAiText('Tuteur IA indisponible pour le moment.');
+      setAiModalVisible(true);
+    } finally {
+      setAiLoading(false);
     }
   };
 
   const handleRestart = () => {
     setCurrentIndex(0);
-    setSelectedAnswer(null);
+    setSelectedId(null);
     setShowResult(false);
     setScore(0);
     setFinished(false);
+    setAiText(null);
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.accent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!qcm || questions.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.topBackBtn}>
+          <Text style={styles.backText}>‹ Retour</Text>
+        </TouchableOpacity>
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>Aucun QCM disponible pour ce niveau.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (finished) {
-    return <ResultScreen score={score} total={QUESTIONS.length} onRestart={handleRestart} navigation={navigation} />;
+    return (
+      <ResultScreen
+        score={score}
+        total={questions.length}
+        qcmTitle={qcm.title}
+        onRestart={handleRestart}
+        navigation={navigation}
+      />
+    );
   }
 
   return (
@@ -123,7 +143,7 @@ export default function QcmScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>‹ Retour</Text>
         </TouchableOpacity>
-        <Text style={styles.progressLabel}>{currentIndex + 1} / {QUESTIONS.length}</Text>
+        <Text style={styles.progressLabel}>{currentIndex + 1} / {questions.length}</Text>
       </View>
 
       <View style={styles.progressTrack}>
@@ -131,74 +151,105 @@ export default function QcmScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelText}>{question.level}</Text>
+        <View style={styles.qcmMeta}>
+          <Text style={styles.qcmTitle}>{qcm.title}</Text>
+          {qcm.theme ? <Text style={styles.qcmTheme}>{qcm.theme}</Text> : null}
         </View>
 
         <View style={styles.questionBlock}>
-          <Text style={styles.questionDE}>{question.german}</Text>
-          <Text style={styles.questionFR}>{question.french}</Text>
+          <Text style={styles.questionText}>{question.questionText}</Text>
         </View>
 
         <Text style={styles.chooseLabel}>Choisissez la bonne réponse :</Text>
 
-        {question.options.map((option) => {
-          const isSelected = selectedAnswer === option.id;
-          const isCorrect = option.id === question.correct;
-          let optionStyle = styles.option;
+        {question.choices?.map((choice) => {
+          const isSelected = selectedId === choice.id;
+          const isCorrect = choice.isCorrect;
+          let cardStyle = styles.option;
           let textStyle = styles.optionText;
+          let dotStyle = styles.optionLetter;
 
           if (showResult) {
             if (isCorrect) {
-              optionStyle = [styles.option, styles.optionCorrect];
+              cardStyle = [styles.option, styles.optionCorrect];
               textStyle = [styles.optionText, styles.optionTextCorrect];
-            } else if (isSelected && !isCorrect) {
-              optionStyle = [styles.option, styles.optionWrong];
+              dotStyle = [styles.optionLetter, styles.optionLetterCorrect];
+            } else if (isSelected) {
+              cardStyle = [styles.option, styles.optionWrong];
               textStyle = [styles.optionText, styles.optionTextWrong];
+              dotStyle = [styles.optionLetter, styles.optionLetterWrong];
             }
           } else if (isSelected) {
-            optionStyle = [styles.option, styles.optionSelected];
+            cardStyle = [styles.option, styles.optionSelected];
           }
 
           return (
             <TouchableOpacity
-              key={option.id}
-              style={optionStyle}
-              onPress={() => handleSelect(option.id)}
+              key={choice.id}
+              style={cardStyle}
+              onPress={() => handleSelect(choice.id, choice.isCorrect)}
               activeOpacity={0.75}
             >
-              <View style={[styles.optionLetter, showResult && isCorrect && styles.optionLetterCorrect, showResult && isSelected && !isCorrect && styles.optionLetterWrong]}>
-                <Text style={[styles.optionLetterText, showResult && (isCorrect || (isSelected && !isCorrect)) && { color: COLORS.parchment }]}>
-                  {option.id.toUpperCase()}
-                </Text>
+              <View style={dotStyle}>
+                {showResult && isCorrect && <Text style={styles.dotIcon}>✓</Text>}
+                {showResult && isSelected && !isCorrect && <Text style={styles.dotIcon}>✗</Text>}
               </View>
-              <Text style={textStyle}>{option.text}</Text>
-              {showResult && isCorrect && <Text style={styles.checkIcon}>✓</Text>}
-              {showResult && isSelected && !isCorrect && <Text style={styles.wrongIcon}>✗</Text>}
+              <Text style={textStyle}>{choice.choiceText}</Text>
             </TouchableOpacity>
           );
         })}
 
         {showResult && (
           <View style={styles.explanation}>
-            <Text style={styles.explanationTitle}>Explication</Text>
-            <Text style={styles.explanationText}>{question.explanation}</Text>
+            <Text style={styles.explanationTitle}>EXPLICATION</Text>
+            <Text style={styles.explanationText}>{explanation}</Text>
+
+            <TouchableOpacity
+              style={styles.aiBtn}
+              onPress={handleAskAI}
+              disabled={aiLoading}
+            >
+              {aiLoading ? (
+                <ActivityIndicator size="small" color={COLORS.gold} />
+              ) : (
+                <Text style={styles.aiBtnText}>🤖  Demander au tuteur IA</Text>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
         {showResult && (
           <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
             <Text style={styles.nextBtnText}>
-              {currentIndex < QUESTIONS.length - 1 ? 'QUESTION SUIVANTE' : 'VOIR LES RÉSULTATS'}
+              {currentIndex < questions.length - 1 ? 'QUESTION SUIVANTE  ›' : 'VOIR LES RÉSULTATS'}
             </Text>
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      <Modal
+        visible={aiModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAiModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>🤖 Tuteur IA</Text>
+            <ScrollView style={styles.modalScroll}>
+              <Text style={styles.modalText}>{aiText}</Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.modalClose} onPress={() => setAiModalVisible(false)}>
+              <Text style={styles.modalCloseText}>FERMER</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-function ResultScreen({ score, total, onRestart, navigation }) {
+function ResultScreen({ score, total, qcmTitle, onRestart, navigation }) {
   const percentage = Math.round((score / total) * 100);
   const passed = percentage >= 60;
 
@@ -207,9 +258,7 @@ function ResultScreen({ score, total, onRestart, navigation }) {
       <View style={styles.resultContainer}>
         <Text style={styles.resultEmoji}>{passed ? '🏆' : '📚'}</Text>
         <Text style={styles.resultTitle}>{passed ? 'Bravo !' : 'Continuez !'}</Text>
-        <Text style={styles.resultSubtitle}>
-          {passed ? 'Excellent travail sur ce QCM.' : 'La pratique mène à la perfection.'}
-        </Text>
+        <Text style={styles.resultSubtitle}>{qcmTitle}</Text>
 
         <View style={styles.scoreCircle}>
           <Text style={styles.scoreValue}>{score}/{total}</Text>
@@ -217,8 +266,8 @@ function ResultScreen({ score, total, onRestart, navigation }) {
         </View>
 
         <View style={styles.resultMeta}>
-          <ResultStat label="Bonnes réponses" value={`${score}`} positive />
-          <ResultStat label="Mauvaises réponses" value={`${total - score}`} />
+          <ResultStat label="Corrects" value={`${score}`} positive />
+          <ResultStat label="Erreurs" value={`${total - score}`} />
           <ResultStat label="Score" value={`${percentage}%`} positive={passed} />
         </View>
 
@@ -246,251 +295,114 @@ function ResultStat({ label, value, positive }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.deep },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 15, fontStyle: 'italic' },
+  topBackBtn: { padding: 20 },
 
   topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
   },
   backBtn: { padding: 4 },
-  backText: {
-    fontFamily: FONTS.regular,
-    color: COLORS.gold,
-    fontSize: 16,
-  },
-  progressLabel: {
-    fontFamily: FONTS.uiMedium,
-    color: COLORS.muted,
-    fontSize: 13,
-  },
+  backText: { fontFamily: FONTS.regular, color: COLORS.gold, fontSize: 16 },
+  progressLabel: { fontFamily: FONTS.uiMedium, color: COLORS.muted, fontSize: 13 },
 
-  progressTrack: {
-    height: 3,
-    backgroundColor: 'rgba(126,102,58,0.2)',
-    marginHorizontal: 20,
-    borderRadius: 2,
-  },
-  progressFill: {
-    height: 3,
-    backgroundColor: COLORS.gold,
-    borderRadius: 2,
-  },
+  progressTrack: { height: 3, backgroundColor: 'rgba(126,102,58,0.2)', marginHorizontal: 20, borderRadius: 2 },
+  progressFill: { height: 3, backgroundColor: COLORS.gold, borderRadius: 2 },
 
-  scroll: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
 
-  levelBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(184,137,58,0.15)',
-    borderRadius: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginBottom: 16,
-  },
-  levelText: {
-    fontFamily: FONTS.uiBold,
-    color: COLORS.gold,
-    fontSize: 11,
-    letterSpacing: 1,
-  },
+  qcmMeta: { marginBottom: 16 },
+  qcmTitle: { fontFamily: FONTS.display, color: COLORS.parchment, fontSize: 19, marginBottom: 2 },
+  qcmTheme: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 12 },
 
   questionBlock: {
-    backgroundColor: 'rgba(245,239,227,0.05)',
-    borderRadius: 10,
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(126,102,58,0.2)',
+    backgroundColor: 'rgba(245,239,227,0.05)', borderRadius: 10,
+    padding: 20, marginBottom: 24,
+    borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
   },
-  questionDE: {
-    fontFamily: FONTS.displayItalic,
-    color: COLORS.parchment,
-    fontSize: 26,
-    marginBottom: 8,
-    lineHeight: 34,
-  },
-  questionFR: {
-    fontFamily: FONTS.regular,
-    color: COLORS.muted,
-    fontSize: 15,
-    fontStyle: 'italic',
-  },
+  questionText: { fontFamily: FONTS.medium, color: COLORS.parchment, fontSize: 18, lineHeight: 28 },
 
-  chooseLabel: {
-    fontFamily: FONTS.uiMedium,
-    color: COLORS.muted,
-    fontSize: 12,
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
+  chooseLabel: { fontFamily: FONTS.uiMedium, color: COLORS.muted, fontSize: 12, letterSpacing: 0.5, marginBottom: 12 },
 
   option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245,239,227,0.06)',
-    borderRadius: 8,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(126,102,58,0.2)',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(245,239,227,0.06)', borderRadius: 8,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
   },
-  optionSelected: {
-    borderColor: COLORS.accent,
-    backgroundColor: 'rgba(161,94,45,0.12)',
-  },
-  optionCorrect: {
-    borderColor: '#10B981',
-    backgroundColor: 'rgba(16,185,129,0.1)',
-  },
-  optionWrong: {
-    borderColor: '#EF4444',
-    backgroundColor: 'rgba(239,68,68,0.1)',
-  },
+  optionSelected: { borderColor: COLORS.accent, backgroundColor: 'rgba(161,94,45,0.12)' },
+  optionCorrect: { borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.1)' },
+  optionWrong: { borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.1)' },
   optionLetter: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28, height: 28, borderRadius: 14,
     backgroundColor: 'rgba(126,102,58,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
+    alignItems: 'center', justifyContent: 'center', marginRight: 12,
   },
   optionLetterCorrect: { backgroundColor: '#10B981' },
   optionLetterWrong: { backgroundColor: '#EF4444' },
-  optionLetterText: {
-    fontFamily: FONTS.uiBold,
-    color: COLORS.muted,
-    fontSize: 13,
-  },
-  optionText: {
-    fontFamily: FONTS.regular,
-    color: COLORS.cream,
-    fontSize: 15,
-    flex: 1,
-  },
+  dotIcon: { color: COLORS.parchment, fontSize: 13, fontWeight: 'bold' },
+  optionText: { fontFamily: FONTS.regular, color: COLORS.cream, fontSize: 15, flex: 1 },
   optionTextCorrect: { color: '#10B981' },
   optionTextWrong: { color: '#EF4444' },
-  checkIcon: { color: '#10B981', fontSize: 18, marginLeft: 8 },
-  wrongIcon: { color: '#EF4444', fontSize: 18, marginLeft: 8 },
 
   explanation: {
-    backgroundColor: 'rgba(184,137,58,0.1)',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(184,137,58,0.25)',
+    backgroundColor: 'rgba(184,137,58,0.1)', borderRadius: 8,
+    padding: 16, marginTop: 8, marginBottom: 20,
+    borderWidth: 1, borderColor: 'rgba(184,137,58,0.25)',
   },
-  explanationTitle: {
-    fontFamily: FONTS.uiBold,
-    color: COLORS.gold,
-    fontSize: 12,
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  explanationTitle: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 11, letterSpacing: 1, marginBottom: 6 },
+  explanationText: { fontFamily: FONTS.regular, color: COLORS.cream, fontSize: 14, lineHeight: 21, marginBottom: 14 },
+  aiBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(184,137,58,0.4)',
+    borderRadius: 6, paddingVertical: 10,
   },
-  explanationText: {
-    fontFamily: FONTS.regular,
-    color: COLORS.cream,
-    fontSize: 14,
-    lineHeight: 21,
-  },
+  aiBtnText: { fontFamily: FONTS.uiMedium, color: COLORS.gold, fontSize: 13 },
 
-  nextBtn: {
-    backgroundColor: COLORS.accent,
-    borderRadius: 6,
-    padding: 16,
-    alignItems: 'center',
-  },
-  nextBtnText: {
-    fontFamily: FONTS.uiBold,
-    color: COLORS.parchment,
-    fontSize: 13,
-    letterSpacing: 1.5,
-  },
+  nextBtn: { backgroundColor: COLORS.accent, borderRadius: 6, padding: 16, alignItems: 'center' },
+  nextBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13, letterSpacing: 1.5 },
 
-  resultContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
   },
+  modalCard: {
+    backgroundColor: '#2A1D14', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 24, maxHeight: '70%',
+  },
+  modalTitle: { fontFamily: FONTS.display, color: COLORS.parchment, fontSize: 20, marginBottom: 16 },
+  modalScroll: { maxHeight: 300 },
+  modalText: { fontFamily: FONTS.regular, color: COLORS.cream, fontSize: 15, lineHeight: 24 },
+  modalClose: {
+    backgroundColor: COLORS.accent, borderRadius: 6, padding: 14,
+    alignItems: 'center', marginTop: 20,
+  },
+  modalCloseText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13, letterSpacing: 1 },
+
+  resultContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   resultEmoji: { fontSize: 72, marginBottom: 16 },
-  resultTitle: {
-    fontFamily: FONTS.display,
-    color: COLORS.parchment,
-    fontSize: 36,
-    marginBottom: 8,
-  },
-  resultSubtitle: {
-    fontFamily: FONTS.regular,
-    color: COLORS.muted,
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
+  resultTitle: { fontFamily: FONTS.display, color: COLORS.parchment, fontSize: 36, marginBottom: 8 },
+  resultSubtitle: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 14, textAlign: 'center', marginBottom: 32 },
   scoreCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: COLORS.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
+    width: 120, height: 120, borderRadius: 60,
+    borderWidth: 3, borderColor: COLORS.gold,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 32,
   },
-  scoreValue: {
-    fontFamily: FONTS.displayBold,
-    color: COLORS.parchment,
-    fontSize: 28,
-  },
-  scorePercent: {
-    fontFamily: FONTS.uiMedium,
-    color: COLORS.gold,
-    fontSize: 13,
-  },
-  resultMeta: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 40,
-    width: '100%',
-    justifyContent: 'center',
-  },
+  scoreValue: { fontFamily: FONTS.displayBold, color: COLORS.parchment, fontSize: 28 },
+  scorePercent: { fontFamily: FONTS.uiMedium, color: COLORS.gold, fontSize: 13 },
+  resultMeta: { flexDirection: 'row', gap: 16, marginBottom: 40, width: '100%', justifyContent: 'center' },
   resultStat: { alignItems: 'center' },
-  resultStatValue: {
-    fontFamily: FONTS.displayBold,
-    fontSize: 22,
-    marginBottom: 4,
-  },
+  resultStatValue: { fontFamily: FONTS.displayBold, fontSize: 22, marginBottom: 4 },
   statPositive: { color: COLORS.gold },
   statNegative: { color: COLORS.muted },
-  resultStatLabel: {
-    fontFamily: FONTS.ui,
-    color: COLORS.muted,
-    fontSize: 11,
-    textAlign: 'center',
-  },
+  resultStatLabel: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11, textAlign: 'center' },
   restartBtn: {
-    backgroundColor: COLORS.accent,
-    borderRadius: 6,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    marginBottom: 14,
-    width: '100%',
-    alignItems: 'center',
+    backgroundColor: COLORS.accent, borderRadius: 6,
+    paddingVertical: 14, paddingHorizontal: 40, marginBottom: 14,
+    width: '100%', alignItems: 'center',
   },
-  restartBtnText: {
-    fontFamily: FONTS.uiBold,
-    color: COLORS.parchment,
-    fontSize: 13,
-    letterSpacing: 1.5,
-  },
+  restartBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13, letterSpacing: 1.5 },
   backToCourseBtn: { paddingVertical: 8 },
-  backToCourseBtnText: {
-    fontFamily: FONTS.regular,
-    color: COLORS.muted,
-    fontSize: 14,
-  },
+  backToCourseBtnText: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 14 },
 });
