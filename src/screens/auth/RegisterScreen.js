@@ -4,14 +4,14 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/config';
+import { COLORS, FONTS } from '../../constants/config';
 import { authAPI } from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
 
 export default function RegisterScreen({ navigation }) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', confirm: '' });
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', email: '', phone: '', password: '', confirm: '',
+  });
   const [loading, setLoading] = useState(false);
-  const setAuth = useAuthStore((s) => s.setAuth);
 
   const update = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -37,10 +37,12 @@ export default function RegisterScreen({ navigation }) {
         password: form.password,
         phone: form.phone,
       });
-      await setAuth(
-        { email: data.email, firstName: data.firstName, lastName: data.lastName, role: data.role },
-        data.accessToken
-      );
+      navigation.navigate('Pricing', {
+        authData: {
+          user: { email: data.email, firstName: data.firstName, lastName: data.lastName, role: data.role },
+          accessToken: data.accessToken,
+        },
+      });
     } catch (err) {
       const msg = err.response?.data?.error || 'Erreur lors de l\'inscription';
       Alert.alert('Inscription impossible', msg);
@@ -55,7 +57,7 @@ export default function RegisterScreen({ navigation }) {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
-            <Text style={styles.backText}>← Retour</Text>
+            <Text style={styles.backText}>‹ Retour</Text>
           </TouchableOpacity>
 
           <Text style={styles.heading}>Créer un compte</Text>
@@ -80,9 +82,10 @@ export default function RegisterScreen({ navigation }) {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.loginLink}>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.loginLink}>
             <Text style={styles.loginText}>
-              Déjà un compte ? <Text style={{ color: COLORS.gold }}>Se connecter</Text>
+              Déjà un compte ?{'  '}
+              <Text style={styles.loginTextHighlight}>Se connecter</Text>
             </Text>
           </TouchableOpacity>
 
@@ -104,33 +107,69 @@ function Field({ label, ...props }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.deep },
   scroll: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
-  back: { paddingTop: 16, paddingBottom: 8 },
-  backText: { color: COLORS.gold, fontSize: 14 },
-  heading: { fontSize: 28, fontWeight: 'bold', color: COLORS.parchment, marginTop: 16 },
-  subheading: { color: COLORS.muted, fontSize: 14, marginTop: 4, marginBottom: 16 },
-  label: { color: COLORS.cream, fontSize: 13, marginBottom: 6, marginTop: 14 },
+
+  back: { paddingTop: 16, paddingBottom: 4 },
+  backText: {
+    fontFamily: FONTS.regular,
+    color: COLORS.gold,
+    fontSize: 16,
+  },
+
+  heading: {
+    fontFamily: FONTS.display,
+    color: COLORS.parchment,
+    fontSize: 30,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  subheading: {
+    fontFamily: FONTS.regular,
+    color: COLORS.muted,
+    fontSize: 15,
+    marginBottom: 8,
+  },
+
+  label: {
+    fontFamily: FONTS.uiMedium,
+    color: COLORS.cream,
+    fontSize: 13,
+    marginBottom: 7,
+    marginTop: 16,
+    letterSpacing: 0.3,
+  },
   input: {
-    backgroundColor: 'rgba(249,244,232,0.08)',
+    backgroundColor: 'rgba(249,244,232,0.07)',
     borderWidth: 1,
-    borderColor: '#7E663A55',
-    borderRadius: 4,
+    borderColor: 'rgba(126,102,58,0.4)',
+    borderRadius: 6,
     padding: 14,
     color: COLORS.parchment,
     fontSize: 15,
+    fontFamily: FONTS.regular,
   },
+
   button: {
     backgroundColor: COLORS.accent,
     padding: 16,
-    borderRadius: 4,
+    borderRadius: 6,
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 28,
   },
   buttonText: {
+    fontFamily: FONTS.uiBold,
     color: COLORS.parchment,
-    fontWeight: 'bold',
     fontSize: 14,
     letterSpacing: 1.5,
   },
+
   loginLink: { alignItems: 'center', marginTop: 20 },
-  loginText: { color: COLORS.muted, fontSize: 14 },
+  loginText: {
+    fontFamily: FONTS.regular,
+    color: COLORS.muted,
+    fontSize: 14,
+  },
+  loginTextHighlight: {
+    fontFamily: FONTS.medium,
+    color: COLORS.gold,
+  },
 });

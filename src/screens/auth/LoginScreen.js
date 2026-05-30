@@ -4,7 +4,7 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/config';
+import { COLORS, FONTS } from '../../constants/config';
 import { authAPI } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 
@@ -40,12 +40,12 @@ export default function LoginScreen({ navigation }) {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>Sprach</Text>
-              <Text style={[styles.title, { color: COLORS.accent }]}>Reise</Text>
-            </View>
-            <Text style={styles.subtitle}>Connectez-vous à votre compte</Text>
+            <Text style={styles.logo}>SprachReise</Text>
+            <Text style={styles.logoSub}>Voyage en langue allemande</Text>
           </View>
+
+          <Text style={styles.heading}>Bienvenue</Text>
+          <Text style={styles.subheading}>Connectez-vous à votre compte</Text>
 
           <View style={styles.form}>
             <Text style={styles.label}>Adresse email</Text>
@@ -69,6 +69,10 @@ export default function LoginScreen({ navigation }) {
               secureTextEntry
             />
 
+            <TouchableOpacity style={styles.forgotLink}>
+              <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.button, loading && { opacity: 0.6 }]}
               onPress={handleLogin}
@@ -83,8 +87,8 @@ export default function LoginScreen({ navigation }) {
 
             <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.registerLink}>
               <Text style={styles.registerText}>
-                Pas encore de compte ?{' '}
-                <Text style={{ color: COLORS.gold }}>S'inscrire</Text>
+                Pas encore de compte ?{'  '}
+                <Text style={styles.registerTextHighlight}>S'inscrire</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -97,35 +101,84 @@ export default function LoginScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.deep },
-  scroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 32, paddingBottom: 40 },
+
   header: { alignItems: 'center', marginBottom: 48 },
-  titleRow: { flexDirection: 'row' },
-  title: { fontSize: 36, color: COLORS.parchment, fontWeight: 'bold' },
-  subtitle: { color: COLORS.muted, fontSize: 14, marginTop: 6 },
-  form: { flex: 1 },
-  label: { color: COLORS.cream, fontSize: 13, marginBottom: 6, marginTop: 16 },
+  logo: {
+    fontFamily: FONTS.displayItalic,
+    color: COLORS.parchment,
+    fontSize: 32,
+    letterSpacing: 0.5,
+  },
+  logoSub: {
+    fontFamily: FONTS.regular,
+    color: COLORS.muted,
+    fontSize: 13,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+
+  heading: {
+    fontFamily: FONTS.display,
+    color: COLORS.parchment,
+    fontSize: 30,
+    marginBottom: 6,
+  },
+  subheading: {
+    fontFamily: FONTS.regular,
+    color: COLORS.muted,
+    fontSize: 15,
+    marginBottom: 28,
+  },
+
+  form: {},
+  label: {
+    fontFamily: FONTS.uiMedium,
+    color: COLORS.cream,
+    fontSize: 13,
+    marginBottom: 7,
+    marginTop: 16,
+    letterSpacing: 0.3,
+  },
   input: {
-    backgroundColor: 'rgba(249,244,232,0.08)',
+    backgroundColor: 'rgba(249,244,232,0.07)',
     borderWidth: 1,
-    borderColor: '#7E663A55',
-    borderRadius: 4,
+    borderColor: 'rgba(126,102,58,0.4)',
+    borderRadius: 6,
     padding: 14,
     color: COLORS.parchment,
     fontSize: 15,
+    fontFamily: FONTS.regular,
   },
+  forgotLink: { alignSelf: 'flex-end', marginTop: 8 },
+  forgotText: {
+    fontFamily: FONTS.regular,
+    color: COLORS.gold,
+    fontSize: 13,
+  },
+
   button: {
     backgroundColor: COLORS.accent,
     padding: 16,
-    borderRadius: 4,
+    borderRadius: 6,
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 28,
   },
   buttonText: {
+    fontFamily: FONTS.uiBold,
     color: COLORS.parchment,
-    fontWeight: 'bold',
     fontSize: 14,
     letterSpacing: 1.5,
   },
+
   registerLink: { alignItems: 'center', marginTop: 20 },
-  registerText: { color: COLORS.muted, fontSize: 14 },
+  registerText: {
+    fontFamily: FONTS.regular,
+    color: COLORS.muted,
+    fontSize: 14,
+  },
+  registerTextHighlight: {
+    fontFamily: FONTS.medium,
+    color: COLORS.gold,
+  },
 });
