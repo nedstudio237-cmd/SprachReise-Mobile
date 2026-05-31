@@ -10,23 +10,24 @@ const { width } = Dimensions.get('window');
 const slides = [
   {
     id: '1',
-    emoji: '🇩🇪',
+    emoji: '🌍',
     title: 'Bienvenue sur\nSprachReise',
-    subtitle: 'Commencez votre voyage vers la maîtrise de l\'allemand, depuis l\'Afrique.',
+    subtitle: 'La plateforme des apprenants d\'Afrique francophone qui préparent leurs études et voyages à l\'international.',
     eyebrow: 'DÉCOUVREZ',
+    langs: ['🇩🇪', '🇬🇧', '🇪🇸', '🇨🇳'],
   },
   {
     id: '2',
-    emoji: '🎓',
-    title: 'Des formateurs\ncertifiés',
-    subtitle: 'Apprenez avec des experts qualifiés, en sessions live ou à votre rythme.',
-    eyebrow: 'APPRENEZ',
+    emoji: '🗣️',
+    title: 'Apprenez la langue\nde votre destination',
+    subtitle: 'Allemand, Anglais, Espagnol, Mandarin — choisissez la langue qui ouvre les portes de votre avenir.',
+    eyebrow: 'CHOISISSEZ',
   },
   {
     id: '3',
-    emoji: '📜',
-    title: 'Certifiez-vous\net progressez',
-    subtitle: 'Obtenez un certificat reconnu à chaque niveau complété (A1 → C2).',
+    emoji: '🏆',
+    title: 'Certifiez-vous\net voyagez confiant',
+    subtitle: 'Progressez de A1 à C2 avec un tuteur IA personnalisé, des sessions live et des certificats reconnus.',
     eyebrow: 'PROGRESSEZ',
   },
 ];
@@ -61,6 +62,15 @@ export default function OnboardingScreen({ navigation }) {
         renderItem={({ item }) => (
           <View style={styles.slide}>
             <Text style={styles.emoji}>{item.emoji}</Text>
+            {item.langs && (
+              <View style={styles.langsRow}>
+                {item.langs.map((f, i) => (
+                  <View key={i} style={styles.langBubble}>
+                    <Text style={styles.langFlag}>{f}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             <Text style={styles.eyebrow}>{item.eyebrow}</Text>
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.subtitle}>{item.subtitle}</Text>
@@ -105,7 +115,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingTop: 20,
   },
-  emoji: { fontSize: 88, marginBottom: 24 },
+  emoji: { fontSize: 80, marginBottom: 16 },
+  langsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  langBubble: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(245,239,227,0.08)',
+    borderWidth: 1, borderColor: 'rgba(184,137,58,0.3)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  langFlag: { fontSize: 24 },
   eyebrow: {
     fontFamily: FONTS.uiBold,
     color: COLORS.gold,
