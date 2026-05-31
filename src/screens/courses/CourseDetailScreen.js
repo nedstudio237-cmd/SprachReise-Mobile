@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, Linking, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
+import { API_BASE_URL } from '../../constants/config';
 import api from '../../services/api';
 
 const TABS = ['Description', 'Documents', 'Notes'];
@@ -136,13 +137,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         )}
 
         {activeTab === 'Documents' && (
-          <View style={styles.notesEmpty}>
-            <Text style={styles.notesEmptyIcon}>📄</Text>
-            <Text style={styles.notesEmptyTitle}>Documents à venir</Text>
-            <Text style={styles.notesEmptyText}>
-              Les supports de cours seront disponibles prochainement.
-            </Text>
-          </View>
+          <DocumentsTab course={course} />
         )}
 
         {activeTab === 'Notes' && (
@@ -156,6 +151,60 @@ export default function CourseDetailScreen({ route, navigation }) {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function DocumentsTab({ course }) {
+  const BASE = API_BASE_URL.replace('/api', '');
+
+  if (!course?.pdfPath) {
+    return (
+      <View style={styles.notesEmpty}>
+        <Text style={styles.notesEmptyIcon}>📄</Text>
+        <Text style={styles.notesEmptyTitle}>Document en préparation</Text>
+        <Text style={styles.notesEmptyText}>Le guide de cours sera disponible prochainement.</Text>
+      </View>
+    );
+  }
+
+  const pdfUrl = `${BASE}/api/files/${course.pdfPath}`;
+  const filename = `SprachReise_${course.levelCode}_${course.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+
+  const openPdf = async () => {
+    try {
+      await Linking.openURL(pdfUrl);
+    } catch {
+      Alert.alert('Erreur', 'Impossible d\'ouvrir le PDF.');
+    }
+  };
+
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>GUIDE DE COURS OFFICIEL</Text>
+
+      <View style={styles.pdfCard}>
+        <View style={styles.pdfIconBox}>
+          <Text style={styles.pdfIcon}>📕</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pdfTitle}>{course.title}</Text>
+          <Text style={styles.pdfMeta}>Guide pédagogique · PDF · Niveau {course.levelCode}</Text>
+          <Text style={styles.pdfMeta}>Vocabulaire · Grammaire · Exemples</Text>
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.pdfOpenBtn} onPress={openPdf}>
+        <Text style={styles.pdfOpenBtnText}>📖  CONSULTER LE PDF</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.pdfDownloadBtn} onPress={openPdf}>
+        <Text style={styles.pdfDownloadBtnText}>⬇  TÉLÉCHARGER</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.pdfHint}>
+        Le PDF s'ouvre dans votre navigateur. Appuyez sur les 3 points pour sauvegarder.
+      </Text>
+    </View>
   );
 }
 
@@ -224,6 +273,32 @@ const styles = StyleSheet.create({
   qcmBtnLocked: { borderColor: 'rgba(126,102,58,0.3)' },
   qcmBtnText: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 13, letterSpacing: 1 },
   qcmBtnTextLocked: { color: COLORS.muted },
+
+  pdfCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(245,239,227,0.06)', borderRadius: 10,
+    padding: 16, marginBottom: 16,
+    borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
+  },
+  pdfIconBox: {
+    width: 52, height: 52, borderRadius: 10,
+    backgroundColor: 'rgba(161,94,45,0.15)',
+    alignItems: 'center', justifyContent: 'center', marginRight: 14,
+  },
+  pdfIcon: { fontSize: 28 },
+  pdfTitle: { fontFamily: FONTS.displayBold, color: COLORS.parchment, fontSize: 15, marginBottom: 3 },
+  pdfMeta: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11, marginBottom: 1 },
+  pdfOpenBtn: {
+    backgroundColor: COLORS.accent, borderRadius: 8,
+    padding: 15, alignItems: 'center', marginBottom: 10,
+  },
+  pdfOpenBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13, letterSpacing: 1 },
+  pdfDownloadBtn: {
+    borderWidth: 1.5, borderColor: COLORS.gold, borderRadius: 8,
+    padding: 13, alignItems: 'center', marginBottom: 14,
+  },
+  pdfDownloadBtnText: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 13, letterSpacing: 1 },
+  pdfHint: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11, textAlign: 'center', fontStyle: 'italic' },
 
   notesEmpty: { alignItems: 'center', paddingTop: 60 },
   notesEmptyIcon: { fontSize: 56, marginBottom: 16 },
