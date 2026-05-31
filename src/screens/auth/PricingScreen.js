@@ -27,13 +27,10 @@ const plans = [
 
 export default function PricingScreen({ navigation, route }) {
   const [selected, setSelected] = useState('STANDARD');
-  const setAuth = useAuthStore((s) => s.setAuth);
   const authData = route?.params?.authData;
 
-  const handleContinue = async () => {
-    if (authData) {
-      await setAuth(authData.user, authData.accessToken);
-    }
+  const handleContinue = () => {
+    navigation.navigate('LanguageSelect', { authData, plan: selected });
   };
 
   return (

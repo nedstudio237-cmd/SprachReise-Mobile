@@ -4,7 +4,7 @@
 // export const API_BASE_URL = 'http://192.168.1.152:8090/api';
 
 // Option 2 — LTE (localtunnel actif) :
-export const API_BASE_URL = 'https://green-signs-stare.loca.lt/api';
+export const API_BASE_URL = 'http://172.20.10.7:8090/api';
 
 export const COLORS = {
   primary: '#7E663A',

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
+import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 
 const TABS = ['Description', 'Documents', 'Notes'];
@@ -14,6 +15,9 @@ export default function CourseDetailScreen({ route, navigation }) {
   const [activeTab, setActiveTab] = useState('Description');
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { courseProgress } = useAuthStore();
+  const progress = courseProgress[courseId];
+  const courseCompleted = progress?.completed ?? false;
 
   useEffect(() => {
     if (!courseId) { setLoading(false); return; }
@@ -99,16 +103,34 @@ export default function CourseDetailScreen({ route, navigation }) {
 
             <TouchableOpacity
               style={styles.continueBtn}
-              onPress={() => navigation?.navigate('Qcm', { levelId: course.levelId })}
+              onPress={() => navigation?.navigate('CoursePlayer', { courseId: course.id })}
             >
-              <Text style={styles.continueBtnText}>COMMENCER LE COURS</Text>
+              <Text style={styles.continueBtnText}>
+                {progress?.chaptersRead > 0 ? 'CONTINUER LE COURS  ›' : 'COMMENCER LE COURS  ›'}
+              </Text>
             </TouchableOpacity>
 
+            {progress?.chaptersRead > 0 && (
+              <View style={styles.progressRow}>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, {
+                    width: `${Math.round((progress.chaptersRead / (progress.totalChapters || 1)) * 100)}%`
+                  }]} />
+                </View>
+                <Text style={styles.progressLabel}>
+                  {progress.chaptersRead}/{progress.totalChapters} chapitres
+                </Text>
+              </View>
+            )}
+
             <TouchableOpacity
-              style={styles.qcmBtn}
-              onPress={() => navigation?.navigate('Qcm', { levelId: course.levelId })}
+              style={[styles.qcmBtn, !courseCompleted && styles.qcmBtnLocked]}
+              onPress={() => courseCompleted && navigation?.navigate('Qcm', { levelId: course.levelId })}
+              disabled={!courseCompleted}
             >
-              <Text style={styles.qcmBtnText}>📝  PASSER LE QCM</Text>
+              <Text style={[styles.qcmBtnText, !courseCompleted && styles.qcmBtnTextLocked]}>
+                {courseCompleted ? '📝  PASSER LE QCM' : '🔒  QCM — Terminez le cours d\'abord'}
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -194,8 +216,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginBottom: 12,
   },
   continueBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13, letterSpacing: 1.5 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  progressTrack: { flex: 1, height: 4, backgroundColor: 'rgba(126,102,58,0.2)', borderRadius: 2 },
+  progressFill: { height: 4, backgroundColor: COLORS.gold, borderRadius: 2 },
+  progressLabel: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11 },
   qcmBtn: { borderWidth: 1, borderColor: COLORS.gold, borderRadius: 6, padding: 14, alignItems: 'center' },
+  qcmBtnLocked: { borderColor: 'rgba(126,102,58,0.3)' },
   qcmBtnText: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 13, letterSpacing: 1 },
+  qcmBtnTextLocked: { color: COLORS.muted },
 
   notesEmpty: { alignItems: 'center', paddingTop: 60 },
   notesEmptyIcon: { fontSize: 56, marginBottom: 16 },
