@@ -1,127 +1,163 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const useAuthStore = create((set, get) => ({
-  user: null,
-  accessToken: null,
-  isLoading: true,
+// ─── Clés AsyncStorage par utilisateur ───────────────────────────────────────
+// Chaque donnée est namespaced par email pour isoler les comptes
+const k = (email, key) => `${email}:${key}`;
 
-  // Profil apprenant
+const EMPTY_GAME_STATS = () => ({
+  wordMatch:    { played: 0, correct: 0 },
+  fillBlank:    { played: 0, correct: 0 },
+  listenChoose: { played: 0, correct: 0 },
+  dictee:       { played: 0, correct: 0 },
+  pronounce:    { played: 0, correct: 0 },
+  wordOrder:    { played: 0, correct: 0 },
+});
+
+// Charge toutes les données spécifiques à un utilisateur depuis AsyncStorage
+async function loadUserData(email) {
+  const [language, level, sublevel, progressStr, notesStr, qcmStr, gameStr] =
+    await Promise.all([
+      AsyncStorage.getItem(k(email, 'language')),
+      AsyncStorage.getItem(k(email, 'level')),
+      AsyncStorage.getItem(k(email, 'sublevel')),
+      AsyncStorage.getItem(k(email, 'courseProgress')),
+      AsyncStorage.getItem(k(email, 'notes')),
+      AsyncStorage.getItem(k(email, 'qcmAttempts')),
+      AsyncStorage.getItem(k(email, 'gameStats')),
+    ]);
+  return {
+    language:      language   ?? null,
+    level:         level      ?? null,
+    sublevel:      sublevel   ?? null,
+    courseProgress: progressStr ? JSON.parse(progressStr) : {},
+    notes:          notesStr    ? JSON.parse(notesStr)    : {},
+    qcmAttempts:    qcmStr      ? JSON.parse(qcmStr)      : [],
+    gameStats:      gameStr     ? JSON.parse(gameStr)      : EMPTY_GAME_STATS(),
+  };
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
+export const useAuthStore = create((set, get) => ({
+  user:        null,
+  accessToken: null,
+  isLoading:   true,
+
+  // Profil apprenant (propre à l'utilisateur connecté)
   language: null,
-  level: null,
+  level:    null,
   sublevel: null,
 
-  // Progression cours { courseId: { completed, chaptersRead, totalChapters } }
   courseProgress: {},
+  notes:          {},
+  qcmAttempts:    [],
+  gameStats:      EMPTY_GAME_STATS(),
 
-  // Notes par cours { courseId: string }
-  notes: {},
-
-  // Stats QCM [{ qcmId, score, total, percentage, date }]
-  qcmAttempts: [],
-
-  // Stats mini-jeux { wordMatch: { played, correct }, fillBlank: { played, correct } }
-  gameStats: {
-    wordMatch: { played: 0, correct: 0 },
-    fillBlank: { played: 0, correct: 0 },
-    listenChoose: { played: 0, correct: 0 },
-    dictee: { played: 0, correct: 0 },
-    pronounce: { played: 0, correct: 0 },
-    wordOrder: { played: 0, correct: 0 },
-  },
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  // ── Connexion ─────────────────────────────────────────────────────────────
   setAuth: async (user, accessToken) => {
-    set({ user, accessToken });
-    await AsyncStorage.setItem('accessToken', accessToken);
-    await AsyncStorage.setItem('user', JSON.stringify(user));
+    // Persister le token et l'identité
+    await Promise.all([
+      AsyncStorage.setItem('accessToken', accessToken),
+      AsyncStorage.setItem('user', JSON.stringify(user)),
+    ]);
+
+    // Charger les données propres à CET utilisateur
+    const userData = await loadUserData(user.email);
+
+    set({ user, accessToken, ...userData });
   },
 
+  // ── Déconnexion ───────────────────────────────────────────────────────────
   logout: async () => {
-    set({ user: null, accessToken: null });
-    await AsyncStorage.removeItem('accessToken');
-    await AsyncStorage.removeItem('user');
+    // Effacer seulement les tokens — les données utilisateur restent pour la prochaine connexion
+    await Promise.all([
+      AsyncStorage.removeItem('accessToken'),
+      AsyncStorage.removeItem('user'),
+    ]);
+
+    // Remettre le store à zéro (les données seront rechargées au prochain login)
+    set({
+      user:           null,
+      accessToken:    null,
+      language:       null,
+      level:          null,
+      sublevel:       null,
+      courseProgress: {},
+      notes:          {},
+      qcmAttempts:    [],
+      gameStats:      EMPTY_GAME_STATS(),
+    });
   },
 
-  // ── Learner profile ───────────────────────────────────────────────────────
+  // ── Profil apprenant ──────────────────────────────────────────────────────
   setLearnerProfile: async (language, level, sublevel) => {
+    const { user } = get();
+    if (!user?.email) return;
     set({ language, level, sublevel });
-    await AsyncStorage.setItem('language', language);
-    await AsyncStorage.setItem('level', level);
-    await AsyncStorage.setItem('sublevel', sublevel);
+    await Promise.all([
+      AsyncStorage.setItem(k(user.email, 'language'), language),
+      AsyncStorage.setItem(k(user.email, 'level'),    level),
+      AsyncStorage.setItem(k(user.email, 'sublevel'), sublevel),
+    ]);
   },
 
-  // ── Course progress ───────────────────────────────────────────────────────
+  // ── Progression cours ─────────────────────────────────────────────────────
   updateCourseProgress: async (courseId, chaptersRead, totalChapters) => {
+    const { user, courseProgress } = get();
+    if (!user?.email) return;
     const completed = chaptersRead >= totalChapters;
-    const next = { ...get().courseProgress, [courseId]: { completed, chaptersRead, totalChapters } };
+    const next = { ...courseProgress, [courseId]: { completed, chaptersRead, totalChapters } };
     set({ courseProgress: next });
-    await AsyncStorage.setItem('courseProgress', JSON.stringify(next));
+    await AsyncStorage.setItem(k(user.email, 'courseProgress'), JSON.stringify(next));
   },
 
   // ── Notes ─────────────────────────────────────────────────────────────────
   setNote: async (courseId, text) => {
-    const next = { ...get().notes, [courseId]: text };
+    const { user, notes } = get();
+    if (!user?.email) return;
+    const next = { ...notes, [courseId]: text };
     set({ notes: next });
-    await AsyncStorage.setItem('notes', JSON.stringify(next));
+    await AsyncStorage.setItem(k(user.email, 'notes'), JSON.stringify(next));
   },
 
-  // ── QCM stats ─────────────────────────────────────────────────────────────
+  // ── QCM ───────────────────────────────────────────────────────────────────
   recordQcmAttempt: async (qcmId, score, total) => {
+    const { user, qcmAttempts } = get();
+    if (!user?.email) return;
     const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-    const attempt = { qcmId, score, total, percentage, date: new Date().toISOString() };
-    const next = [...get().qcmAttempts, attempt];
+    const next = [...qcmAttempts, { qcmId, score, total, percentage, date: new Date().toISOString() }];
     set({ qcmAttempts: next });
-    await AsyncStorage.setItem('qcmAttempts', JSON.stringify(next));
+    await AsyncStorage.setItem(k(user.email, 'qcmAttempts'), JSON.stringify(next));
   },
 
-  // ── Game stats ────────────────────────────────────────────────────────────
+  // ── Mini-jeux ─────────────────────────────────────────────────────────────
   recordGameResult: async (game, correct, total) => {
-    const prev = get().gameStats;
+    const { user, gameStats } = get();
+    if (!user?.email) return;
     const next = {
-      ...prev,
+      ...gameStats,
       [game]: {
-        played: prev[game].played + total,
-        correct: prev[game].correct + correct,
+        played:  gameStats[game].played  + total,
+        correct: gameStats[game].correct + correct,
       },
     };
     set({ gameStats: next });
-    await AsyncStorage.setItem('gameStats', JSON.stringify(next));
+    await AsyncStorage.setItem(k(user.email, 'gameStats'), JSON.stringify(next));
   },
 
-  // ── Init ─────────────────────────────────────────────────────────────────
+  // ── Initialisation au démarrage ───────────────────────────────────────────
   initialize: async () => {
     try {
-      const [token, userStr, language, level, sublevel,
-        progressStr, notesStr, qcmStr, gameStr] = await Promise.all([
+      const [token, userStr] = await Promise.all([
         AsyncStorage.getItem('accessToken'),
         AsyncStorage.getItem('user'),
-        AsyncStorage.getItem('language'),
-        AsyncStorage.getItem('level'),
-        AsyncStorage.getItem('sublevel'),
-        AsyncStorage.getItem('courseProgress'),
-        AsyncStorage.getItem('notes'),
-        AsyncStorage.getItem('qcmAttempts'),
-        AsyncStorage.getItem('gameStats'),
       ]);
 
       if (token && userStr) {
-        set({
-          user: JSON.parse(userStr),
-          accessToken: token,
-          language: language || 'de',
-          level: level || 'A1',
-          sublevel: sublevel || 'debutant',
-          courseProgress: progressStr ? JSON.parse(progressStr) : {},
-          notes: notesStr ? JSON.parse(notesStr) : {},
-          qcmAttempts: qcmStr ? JSON.parse(qcmStr) : [],
-          gameStats: gameStr ? JSON.parse(gameStr) : {
-          wordMatch:{played:0,correct:0}, fillBlank:{played:0,correct:0},
-          listenChoose:{played:0,correct:0}, dictee:{played:0,correct:0},
-          pronounce:{played:0,correct:0}, wordOrder:{played:0,correct:0},
-        },
-          isLoading: false,
-        });
+        const user = JSON.parse(userStr);
+        // Charger les données propres à cet utilisateur
+        const userData = await loadUserData(user.email);
+        set({ user, accessToken: token, ...userData, isLoading: false });
       } else {
         set({ isLoading: false });
       }

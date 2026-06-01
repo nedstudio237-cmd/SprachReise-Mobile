@@ -24,11 +24,12 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import AuthStack from './src/navigation/AuthStack';
 import MainStack from './src/navigation/MainStack';
+import OnboardingStack from './src/navigation/OnboardingStack';
 import { useAuthStore } from './src/store/authStore';
 import { COLORS } from './src/constants/config';
 
 export default function App() {
-  const { isLoading, accessToken, initialize } = useAuthStore();
+  const { isLoading, accessToken, level, initialize } = useAuthStore();
 
   const [fontsLoaded] = useFonts({
     Fraunces_400Regular,
@@ -61,7 +62,12 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <NavigationContainer>
-          {accessToken ? <MainStack /> : <AuthStack />}
+          {!accessToken
+            ? <AuthStack />
+            : !level
+              ? <OnboardingStack />   // connecté mais pas encore de niveau → sélection
+              : <MainStack />
+          }
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>

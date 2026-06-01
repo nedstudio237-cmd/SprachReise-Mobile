@@ -37,10 +37,12 @@ export default function SubLevelScreen({ navigation, route }) {
   const handleFinish = async () => {
     setLoading(true);
     try {
-      await setLearnerProfile(language, level, selected);
+      // 1. Authentifier d'abord (nécessaire pour avoir user.email dans le store)
       if (authData) {
         await setAuth(authData.user, authData.accessToken);
       }
+      // 2. Sauvegarder le profil avec la clé namespaced par email
+      await setLearnerProfile(language, level, selected);
     } finally {
       setLoading(false);
     }
