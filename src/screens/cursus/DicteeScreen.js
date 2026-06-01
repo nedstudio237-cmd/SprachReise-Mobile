@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
+import { setupSpeaker } from '../../utils/audio';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { DICTEE } from '../../data/vocabulary';
@@ -44,9 +45,10 @@ export default function DicteeScreen({ navigation }) {
   const question = questions[current];
   const progress = (current / questions.length) * 100;
 
-  const speak = useCallback((slow = false) => {
+  const speak = useCallback(async (slow = false) => {
     if (speaking) return;
     setSpeaking(true);
+    await setupSpeaker();
     setPlayCount((c) => c + 1);
     Speech.speak(question.de, {
       language: 'de-DE', rate: slow ? 0.6 : 0.85,

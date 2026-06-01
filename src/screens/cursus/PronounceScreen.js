@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
+import { setupSpeaker, setupRecording } from '../../utils/audio';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { PRONOUNCE } from '../../data/vocabulary';
@@ -27,9 +28,10 @@ export default function PronounceScreen({ navigation }) {
   const question     = questions[current];
   const progress     = (current / questions.length) * 100;
 
-  const speakModel = useCallback(() => {
+  const speakModel = useCallback(async () => {
     if (speaking) return;
     setSpeaking(true);
+    await setupSpeaker();
     Speech.speak(question.de, {
       language: 'de-DE', rate: 0.8,
       onDone: () => setSpeaking(false),
@@ -40,7 +42,7 @@ export default function PronounceScreen({ navigation }) {
   const startRecording = async () => {
     try {
       await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await setupRecording();
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
+import { setupSpeaker } from '../../utils/audio';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { LISTEN_CHOOSE } from '../../data/vocabulary';
@@ -28,9 +29,10 @@ export default function ListenChooseScreen({ navigation }) {
   const question = questions[current];
   const progress = (current / questions.length) * 100;
 
-  const speak = useCallback(() => {
+  const speak = useCallback(async () => {
     if (speaking) return;
     setSpeaking(true);
+    await setupSpeaker();
     Speech.speak(question.de, {
       language: 'de-DE', rate: 0.85, pitch: 1.0,
       onDone: () => setSpeaking(false),

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
+import { setupSpeaker } from '../../utils/audio';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { WORD_ORDER } from '../../data/vocabulary';
@@ -29,9 +30,10 @@ export default function WordOrderScreen({ navigation }) {
   const progress = (current / questions.length) * 100;
   const remaining = question.shuffled.filter((w) => !selected.includes(w));
 
-  const speak = useCallback(() => {
+  const speak = useCallback(async () => {
     if (speaking) return;
     setSpeaking(true);
+    await setupSpeaker();
     Speech.speak(question.audio, {
       language: 'de-DE', rate: 0.8,
       onDone: () => setSpeaking(false),
