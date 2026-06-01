@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
-import Markdown from 'react-native-markdown-display';
+import MarkdownText from '../../components/MarkdownText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
@@ -95,7 +95,7 @@ export default function AiTutorScreen({ navigation, route }) {
           {isUser ? (
             <Text style={styles.bubbleTextUser}>{item.text}</Text>
           ) : (
-            <Markdown style={markdownStyles}>{item.text}</Markdown>
+            <MarkdownText>{item.text}</MarkdownText>
           )}
         </View>
       </View>
@@ -188,25 +188,6 @@ export default function AiTutorScreen({ navigation, route }) {
     </SafeAreaView>
   );
 }
-
-// Styles pour le rendu Markdown des réponses IA
-const markdownStyles = {
-  body:        { color: COLORS.cream, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, lineHeight: 22 },
-  strong:      { color: COLORS.parchment, fontFamily: 'PlusJakartaSans_700Bold' },
-  em:          { color: COLORS.cream, fontStyle: 'italic' },
-  heading1:    { color: COLORS.gold, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, marginBottom: 6, marginTop: 4 },
-  heading2:    { color: COLORS.gold, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, marginBottom: 4, marginTop: 4 },
-  heading3:    { color: COLORS.parchment, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 14, marginBottom: 4 },
-  bullet_list: { marginVertical: 4 },
-  ordered_list:{ marginVertical: 4 },
-  list_item:   { marginBottom: 4 },
-  bullet_list_icon: { color: COLORS.gold, marginRight: 6 },
-  code_inline: { backgroundColor: 'rgba(184,137,58,0.15)', color: COLORS.gold, borderRadius: 4, paddingHorizontal: 5, fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13 },
-  fence:       { backgroundColor: 'rgba(184,137,58,0.1)', borderRadius: 8, padding: 10, marginVertical: 6 },
-  blockquote:  { backgroundColor: 'rgba(245,239,227,0.05)', borderLeftWidth: 3, borderLeftColor: COLORS.gold, paddingLeft: 10, marginVertical: 4 },
-  paragraph:   { marginBottom: 6 },
-  hr:          { borderBottomColor: 'rgba(126,102,58,0.3)', marginVertical: 8 },
-};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.deep },

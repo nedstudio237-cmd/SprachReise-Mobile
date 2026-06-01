@@ -8,6 +8,7 @@ import {
   TouchableOpacity, Text, View, Modal, ScrollView,
   ActivityIndicator, StyleSheet,
 } from 'react-native';
+import MarkdownText from './MarkdownText';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, FONTS } from '../constants/config';
 import api from '../services/api';
@@ -66,7 +67,7 @@ export default function AiTutorButton({
             <View style={styles.card}>
               <Text style={styles.title}>🤖 Tuteur IA</Text>
               <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-                <Text style={styles.body}>{text}</Text>
+                <MarkdownText>{text}</MarkdownText>
               </ScrollView>
               <View style={styles.actions}>
                 <TouchableOpacity
