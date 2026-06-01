@@ -6,6 +6,7 @@ import { setupSpeaker } from '../../utils/audio';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { LISTEN_CHOOSE } from '../../data/vocabulary';
+import AiTutorButton from '../../components/AiTutorButton';
 
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
 
@@ -137,6 +138,13 @@ export default function ListenChooseScreen({ navigation }) {
             </TouchableOpacity>
           );
         })}
+
+        {showResult && selected !== question.correct && (
+          <AiTutorButton
+            question={`Pourquoi la traduction de "${question.de}" est "${question.correct}" et non "${selected}" ?`}
+            level={userLevel}
+          />
+        )}
 
         {showResult && (
           <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>

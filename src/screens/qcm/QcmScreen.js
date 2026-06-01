@@ -8,6 +8,13 @@ import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 
+function shuffleChoices(questions) {
+  return questions.map((q) => ({
+    ...q,
+    choices: [...(q.choices ?? [])].sort(() => Math.random() - 0.5),
+  }));
+}
+
 export default function QcmScreen({ route, navigation }) {
   const levelId = route?.params?.levelId ?? 1;
   const qcmIdParam = route?.params?.qcmId ?? null;
@@ -30,7 +37,7 @@ export default function QcmScreen({ route, navigation }) {
     if (qcmIdParam) {
       // Charger un QCM spécifique depuis CursusScreen
       api.get(`/qcm/${qcmIdParam}`)
-        .then(({ data }) => { setQcm(data); setQuestions(data.questions ?? []); })
+        .then(({ data }) => { setQcm(data); setQuestions(shuffleChoices(data.questions ?? [])); })
         .catch(() => {})
         .finally(() => setLoading(false));
     } else {
@@ -39,7 +46,7 @@ export default function QcmScreen({ route, navigation }) {
           if (data.length > 0) {
             const first = data[0];
             setQcm(first);
-            setQuestions(first.questions ?? []);
+            setQuestions(shuffleChoices(first.questions ?? []));
           }
         })
         .catch(() => {})
@@ -87,7 +94,7 @@ export default function QcmScreen({ route, navigation }) {
     setAiText(null);
     try {
       const { data } = await api.post('/ai/explain', {
-        level: 'A1',
+        level: qcm?.level ?? 'A1',
         question: question.questionText,
         context: explanation,
         mode: 'explain',

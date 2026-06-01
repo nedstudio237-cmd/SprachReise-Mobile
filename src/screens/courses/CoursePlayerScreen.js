@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import AiTutorButton from '../../components/AiTutorButton';
 
 // Chapitres générés à partir du contenu du cours
 function buildChapters(course) {
@@ -158,6 +159,15 @@ export default function CoursePlayerScreen({ route, navigation }) {
                 <Text style={styles.mediaSub}>Disponible dans la version complète</Text>
               </View>
             </View>
+
+            {/* Tuteur IA contextuel au chapitre en cours */}
+            <AiTutorButton
+              question={`J'étudie "${course?.title}" — chapitre "${chapter?.title}". Explique ce concept et donne un exemple pratique.`}
+              context={chapter?.content?.slice(0, 300) ?? ''}
+              level={course?.levelCode ?? 'A1'}
+              mode="explain"
+              label="🤖  Demander au tuteur IA"
+            />
 
             {allDone ? (
               <TouchableOpacity

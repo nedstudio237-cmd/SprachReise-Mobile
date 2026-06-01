@@ -1,12 +1,41 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
-import { setupSpeaker, setupRecording } from '../../utils/audio';
+import Voice from '@react-native-voice/voice';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { PRONOUNCE } from '../../data/vocabulary';
+import api from '../../services/api';
+
+// Levenshtein normalisé (0→1)
+function similarity(a, b) {
+  const s1 = a.toLowerCase().replace(/[^a-zäöüß\s]/g, '').trim();
+  const s2 = b.toLowerCase().replace(/[^a-zäöüß\s]/g, '').trim();
+  if (s1 === s2) return 1;
+  const len = Math.max(s1.length, s2.length);
+  if (len === 0) return 1;
+  const dp = Array.from({ length: s1.length + 1 }, (_, i) =>
+    Array.from({ length: s2.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= s1.length; i++) {
+    for (let j = 1; j <= s2.length; j++) {
+      dp[i][j] = s1[i - 1] === s2[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return 1 - dp[s1.length][s2.length] / len;
+}
+
+function scoreLabel(pct) {
+  if (pct >= 85) return { emoji: '🏆', label: 'Excellent !', color: '#10B981' };
+  if (pct >= 65) return { emoji: '👍', label: 'Bien !',      color: '#3B82F6' };
+  if (pct >= 40) return { emoji: '🙂', label: 'Pas mal',     color: '#F59E0B' };
+  return               { emoji: '💪', label: 'À revoir',     color: '#EF4444' };
+}
+
+const STATE = { IDLE: 'idle', LISTENING: 'listening', ANALYZING: 'analyzing', RESULT: 'result' };
 
 export default function PronounceScreen({ navigation }) {
   const { level, recordGameResult } = useAuthStore();
@@ -14,24 +43,43 @@ export default function PronounceScreen({ navigation }) {
   const pool = PRONOUNCE[userLevel] ?? PRONOUNCE.A1;
 
   const [questions] = useState(() => [...pool].sort(() => Math.random() - 0.5).slice(0, 6));
-  const [current, setCurrent]   = useState(0);
+  const [current, setCurrent] = useState(0);
   const [speaking, setSpeaking] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recorded, setRecorded]   = useState(false);
-  const [playing, setPlaying]     = useState(false);
-  const [selfScore, setSelfScore] = useState(null); // 'good' | 'ok' | 'retry'
+  const [exState, setExState] = useState(STATE.IDLE);
+  const [transcript, setTranscript] = useState('');
+  const [result, setResult] = useState(null);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
+  const [voiceError, setVoiceError] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
-  const recordingRef = useRef(null);
-  const soundRef     = useRef(null);
-  const question     = questions[current];
-  const progress     = (current / questions.length) * 100;
+  const question = questions[current];
+  const progress = (current / questions.length) * 100;
+  const transcriptRef = useRef('');
 
-  const speakModel = useCallback(async () => {
+  useEffect(() => {
+    Voice.onSpeechStart   = () => { setExState(STATE.LISTENING); setVoiceError(null); };
+    Voice.onSpeechEnd     = () => analyzeTranscript(transcriptRef.current);
+    Voice.onSpeechError   = () => {
+      setVoiceError('Microphone non disponible. Vérifiez les permissions micro.');
+      setExState(STATE.IDLE);
+    };
+    Voice.onSpeechResults = (e) => {
+      const text = e?.value?.[0] ?? '';
+      transcriptRef.current = text;
+      setTranscript(text);
+    };
+    Voice.onSpeechPartialResults = (e) => {
+      const text = e?.value?.[0] ?? '';
+      transcriptRef.current = text;
+      setTranscript(text);
+    };
+    return () => { Voice.destroy().then(Voice.removeAllListeners).catch(() => {}); };
+  }, []);
+
+  const speakModel = useCallback(() => {
     if (speaking) return;
     setSpeaking(true);
-    await setupSpeaker();
     Speech.speak(question.de, {
       language: 'de-DE', rate: 0.8,
       onDone: () => setSpeaking(false),
@@ -39,51 +87,55 @@ export default function PronounceScreen({ navigation }) {
     });
   }, [question, speaking]);
 
-  const startRecording = async () => {
+  const startListening = async () => {
+    transcriptRef.current = '';
+    setTranscript('');
+    setVoiceError(null);
     try {
-      await Audio.requestPermissionsAsync();
-      await setupRecording();
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recordingRef.current = recording;
-      setRecording(true);
-    } catch { setRecording(false); }
+      await Voice.start('de-DE');
+    } catch {
+      setVoiceError('Impossible de démarrer le microphone.');
+    }
   };
 
-  const stopRecording = async () => {
-    if (!recordingRef.current) return;
-    setRecording(false);
-    await recordingRef.current.stopAndUnloadAsync();
-    setRecorded(true);
+  const stopListening = async () => {
+    try { await Voice.stop(); } catch {}
   };
 
-  const playback = async () => {
-    if (!recordingRef.current) return;
-    setPlaying(true);
-    const uri = recordingRef.current.getURI();
-    const { sound } = await Audio.Sound.createAsync({ uri });
-    soundRef.current = sound;
-    await sound.playAsync();
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.didJustFinish) setPlaying(false);
-    });
-  };
+  const analyzeTranscript = async (text) => {
+    if (!text) { setExState(STATE.IDLE); return; }
+    setExState(STATE.ANALYZING);
+    const pct = Math.round(similarity(text, question.de) * 100);
+    const { emoji, label, color } = scoreLabel(pct);
 
-  const handleSelfEval = async (result) => {
-    setSelfScore(result);
-    if (result === 'good') setScore((s) => s + 1);
-    else if (result === 'ok') setScore((s) => s + 0);
+    let aiTip = null;
+    if (pct < 85) {
+      setAiLoading(true);
+      try {
+        const { data } = await api.post('/ai/explain', {
+          level: userLevel,
+          question: `L'étudiant a dit "${text}" au lieu de "${question.de}". Donne un conseil de prononciation court (1-2 phrases max).`,
+          context: `Phonétique correcte : [${question.phonetic}]`,
+          mode: 'explain',
+        });
+        aiTip = data.explanation;
+      } catch { aiTip = null; }
+      setAiLoading(false);
+    }
+
+    if (pct >= 65) setScore((s) => s + 1);
+    setResult({ pct, emoji, label, color, aiTip, heard: text });
+    setExState(STATE.RESULT);
   };
 
   const handleNext = async () => {
     Speech.stop();
-    if (soundRef.current) { await soundRef.current.unloadAsync(); soundRef.current = null; }
-    recordingRef.current = null;
+    transcriptRef.current = '';
+    setTranscript('');
+    setResult(null);
+    setExState(STATE.IDLE);
     if (current < questions.length - 1) {
       setCurrent((c) => c + 1);
-      setSpeaking(false); setRecording(false); setRecorded(false);
-      setPlaying(false); setSelfScore(null);
     } else {
       await recordGameResult('pronounce', score, questions.length);
       setFinished(true);
@@ -91,9 +143,8 @@ export default function PronounceScreen({ navigation }) {
   };
 
   const handleRestart = () => {
-    setCurrent(0); setSpeaking(false); setRecording(false);
-    setRecorded(false); setPlaying(false); setSelfScore(null);
-    setScore(0); setFinished(false);
+    setCurrent(0); setExState(STATE.IDLE); setTranscript('');
+    setResult(null); setScore(0); setFinished(false);
   };
 
   if (finished) {
@@ -118,7 +169,7 @@ export default function PronounceScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => { Speech.stop(); navigation?.goBack(); }}>
+        <TouchableOpacity onPress={() => { Speech.stop(); Voice.cancel().catch(() => {}); navigation?.goBack(); }}>
           <Text style={styles.back}>‹ Retour</Text>
         </TouchableOpacity>
         <Text style={styles.counter}>{current + 1} / {questions.length}</Text>
@@ -131,7 +182,6 @@ export default function PronounceScreen({ navigation }) {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.gameTag}>🎤 PRONONCIATION — {userLevel}</Text>
 
-        {/* Phrase à prononcer */}
         <View style={styles.wordCard}>
           <Text style={styles.wordDE}>{question.de}</Text>
           <Text style={styles.wordFR}>{question.fr}</Text>
@@ -141,7 +191,7 @@ export default function PronounceScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Étape 1 — Écouter le modèle */}
+        {/* Étape 1 */}
         <View style={styles.stepRow}>
           <View style={styles.stepNum}><Text style={styles.stepNumText}>1</Text></View>
           <Text style={styles.stepLabel}>Écoute le modèle</Text>
@@ -151,63 +201,86 @@ export default function PronounceScreen({ navigation }) {
           <Text style={styles.listenLabel}>{speaking ? 'Lecture...' : 'ÉCOUTER LE MODÈLE'}</Text>
         </TouchableOpacity>
 
-        {/* Étape 2 — Enregistrer */}
+        {/* Étape 2 */}
         <View style={styles.stepRow}>
           <View style={styles.stepNum}><Text style={styles.stepNumText}>2</Text></View>
-          <Text style={styles.stepLabel}>Enregistre ta prononciation</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.recordBtn, recording && styles.recordBtnActive]}
-          onPress={recording ? stopRecording : startRecording}
-        >
-          <Text style={styles.recordIcon}>{recording ? '⏹' : '🎙️'}</Text>
-          <Text style={styles.recordLabel}>
-            {recording ? 'APPUYER POUR ARRÊTER' : 'APPUYER POUR PARLER'}
+          <Text style={styles.stepLabel}>
+            {exState === STATE.LISTENING ? 'Parlez maintenant...' : 'Appuie et répète la phrase'}
           </Text>
-          {recording && <View style={styles.recordDot} />}
-        </TouchableOpacity>
+        </View>
 
-        {/* Étape 3 — Réécouter + auto-évaluation */}
-        {recorded && (
+        {exState !== STATE.RESULT && (
+          <TouchableOpacity
+            style={[
+              styles.recordBtn,
+              exState === STATE.LISTENING && styles.recordBtnActive,
+              exState === STATE.ANALYZING && { opacity: 0.6 },
+            ]}
+            onPress={exState === STATE.LISTENING ? stopListening : startListening}
+            disabled={exState === STATE.ANALYZING}
+          >
+            <Text style={styles.recordIcon}>
+              {exState === STATE.LISTENING ? '⏹' : exState === STATE.ANALYZING ? '⏳' : '🎙️'}
+            </Text>
+            <Text style={styles.recordLabel}>
+              {exState === STATE.LISTENING  ? 'APPUYER POUR ARRÊTER' :
+               exState === STATE.ANALYZING ? 'Analyse en cours...' :
+               'APPUYER POUR PARLER'}
+            </Text>
+            {exState === STATE.LISTENING && <View style={styles.recordDot} />}
+          </TouchableOpacity>
+        )}
+
+        {/* Transcript temps réel */}
+        {exState === STATE.LISTENING && transcript.length > 0 && (
+          <View style={styles.liveTranscript}>
+            <Text style={styles.liveTranscriptText}>"{transcript}"</Text>
+          </View>
+        )}
+
+        {voiceError && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{voiceError}</Text>
+          </View>
+        )}
+
+        {/* Résultat automatique */}
+        {exState === STATE.RESULT && result && (
           <>
-            <View style={styles.stepRow}>
-              <View style={styles.stepNum}><Text style={styles.stepNumText}>3</Text></View>
-              <Text style={styles.stepLabel}>Réécoute et évalue-toi</Text>
-            </View>
-            <TouchableOpacity style={[styles.playbackBtn, playing && styles.playbackBtnActive]} onPress={playback} disabled={playing}>
-              <Text style={styles.playbackIcon}>{playing ? '🔈' : '▶'}</Text>
-              <Text style={styles.playbackLabel}>{playing ? 'Lecture...' : 'RÉÉCOUTER MA VOIX'}</Text>
-            </TouchableOpacity>
-
-            {selfScore === null ? (
-              <View style={styles.evalRow}>
-                <TouchableOpacity style={styles.evalBtnGood}  onPress={() => handleSelfEval('good')}>
-                  <Text style={styles.evalEmoji}>😄</Text>
-                  <Text style={styles.evalLabel}>Bien !</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.evalBtnOk}    onPress={() => handleSelfEval('ok')}>
-                  <Text style={styles.evalEmoji}>🙂</Text>
-                  <Text style={styles.evalLabel}>Pas mal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.evalBtnRetry} onPress={() => handleSelfEval('retry')}>
-                  <Text style={styles.evalEmoji}>😅</Text>
-                  <Text style={styles.evalLabel}>À revoir</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <View style={styles.evalResult}>
-                  <Text style={styles.evalResultText}>
-                    {selfScore === 'good' ? '✓ Bien prononcé !' : selfScore === 'ok' ? '~ Continuez à pratiquer !' : '↺ Écoutez encore et réessayez'}
-                  </Text>
+            <View style={[styles.scoreResultCard, { borderColor: result.color + '60' }]}>
+              <Text style={styles.scoreResultEmoji}>{result.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.scoreResultLabel, { color: result.color }]}>{result.label}</Text>
+                <Text style={styles.scoreResultPct}>{result.pct}% de similarité</Text>
+                <View style={styles.scoreBar}>
+                  <View style={[styles.scoreBarFill, { width: `${result.pct}%`, backgroundColor: result.color }]} />
                 </View>
-                <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
-                  <Text style={styles.nextBtnText}>
-                    {current < questions.length - 1 ? 'SUIVANT  ›' : 'VOIR MON SCORE'}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
+              </View>
+            </View>
+
+            <View style={styles.heardBox}>
+              <Text style={styles.heardLabel}>🎙 Entendu :</Text>
+              <Text style={styles.heardText}>"{result.heard}"</Text>
+              <Text style={styles.heardLabel}>✓ Correct :</Text>
+              <Text style={styles.heardCorrect}>{question.de}</Text>
+            </View>
+
+            {aiLoading ? (
+              <View style={styles.aiLoadingBox}>
+                <Text style={styles.aiLoadingText}>🤖 Le tuteur IA analyse votre prononciation...</Text>
+              </View>
+            ) : result.aiTip ? (
+              <View style={styles.aiTipBox}>
+                <Text style={styles.aiTipTitle}>💡 CONSEIL DU TUTEUR IA</Text>
+                <Text style={styles.aiTipText}>{result.aiTip}</Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
+              <Text style={styles.nextBtnText}>
+                {current < questions.length - 1 ? 'SUIVANT  ›' : 'VOIR MON SCORE'}
+              </Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -249,30 +322,45 @@ const styles = StyleSheet.create({
   listenLabel: { fontFamily: FONTS.uiBold, color: '#3B82F6', fontSize: 13 },
   recordBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(236,72,153,0.1)', borderRadius: 12, padding: 20, marginBottom: 20,
+    backgroundColor: 'rgba(236,72,153,0.1)', borderRadius: 12, padding: 20, marginBottom: 12,
     borderWidth: 2, borderColor: 'rgba(236,72,153,0.3)', gap: 10,
   },
   recordBtnActive: { borderColor: '#EC4899', backgroundColor: 'rgba(236,72,153,0.2)' },
   recordIcon: { fontSize: 32 },
   recordLabel: { fontFamily: FONTS.uiBold, color: '#EC4899', fontSize: 13 },
   recordDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginLeft: 4 },
-  playbackBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(245,239,227,0.06)', borderRadius: 12, padding: 14, marginBottom: 16,
-    borderWidth: 1, borderColor: 'rgba(126,102,58,0.25)', gap: 10,
+  liveTranscript: {
+    backgroundColor: 'rgba(236,72,153,0.07)', borderRadius: 8, padding: 12, marginBottom: 12,
+    borderWidth: 1, borderColor: 'rgba(236,72,153,0.2)', alignItems: 'center',
   },
-  playbackBtnActive: { borderColor: COLORS.gold },
-  playbackIcon: { fontSize: 24 },
-  playbackLabel: { fontFamily: FONTS.uiBold, color: COLORS.cream, fontSize: 13 },
-  evalRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  evalBtnGood:  { flex: 1, alignItems: 'center', backgroundColor: 'rgba(16,185,129,0.12)', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#10B98140' },
-  evalBtnOk:    { flex: 1, alignItems: 'center', backgroundColor: 'rgba(245,158,11,0.12)',  borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#F59E0B40' },
-  evalBtnRetry: { flex: 1, alignItems: 'center', backgroundColor: 'rgba(239,68,68,0.1)',    borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#EF444440' },
-  evalEmoji: { fontSize: 28, marginBottom: 6 },
-  evalLabel: { fontFamily: FONTS.uiBold, color: COLORS.cream, fontSize: 12 },
-  evalResult: { backgroundColor: 'rgba(245,239,227,0.06)', borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 16 },
-  evalResultText: { fontFamily: FONTS.medium, color: COLORS.parchment, fontSize: 14 },
-  nextBtn: { backgroundColor: COLORS.accent, borderRadius: 8, padding: 16, alignItems: 'center' },
+  liveTranscriptText: { fontFamily: FONTS.medium, color: '#EC4899', fontSize: 15, fontStyle: 'italic' },
+  errorBox: { backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#EF444440' },
+  errorText: { fontFamily: FONTS.regular, color: '#EF4444', fontSize: 13, textAlign: 'center' },
+  scoreResultCard: {
+    flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 16,
+    borderWidth: 1.5, backgroundColor: 'rgba(245,239,227,0.04)', marginBottom: 14, gap: 14,
+  },
+  scoreResultEmoji: { fontSize: 40 },
+  scoreResultLabel: { fontFamily: FONTS.uiBold, fontSize: 17, marginBottom: 2 },
+  scoreResultPct: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 12, marginBottom: 6 },
+  scoreBar: { height: 6, backgroundColor: 'rgba(126,102,58,0.2)', borderRadius: 3, overflow: 'hidden' },
+  scoreBarFill: { height: 6, borderRadius: 3 },
+  heardBox: {
+    backgroundColor: 'rgba(245,239,227,0.05)', borderRadius: 10, padding: 14,
+    marginBottom: 14, borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
+  },
+  heardLabel: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11, marginBottom: 3, marginTop: 6 },
+  heardText: { fontFamily: FONTS.regular, color: COLORS.cream, fontSize: 15, fontStyle: 'italic' },
+  heardCorrect: { fontFamily: FONTS.uiBold, color: '#10B981', fontSize: 16 },
+  aiLoadingBox: { backgroundColor: 'rgba(184,137,58,0.08)', borderRadius: 10, padding: 14, marginBottom: 14, alignItems: 'center' },
+  aiLoadingText: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 13, fontStyle: 'italic' },
+  aiTipBox: {
+    backgroundColor: 'rgba(184,137,58,0.1)', borderRadius: 10, padding: 16, marginBottom: 14,
+    borderWidth: 1, borderColor: 'rgba(184,137,58,0.3)',
+  },
+  aiTipTitle: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 11, letterSpacing: 1, marginBottom: 8 },
+  aiTipText: { fontFamily: FONTS.regular, color: COLORS.cream, fontSize: 14, lineHeight: 22 },
+  nextBtn: { backgroundColor: COLORS.accent, borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 4 },
   nextBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13, letterSpacing: 1.5 },
   resultScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   resultEmoji: { fontSize: 72, marginBottom: 16 },

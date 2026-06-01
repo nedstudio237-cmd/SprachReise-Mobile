@@ -13,6 +13,7 @@
     "@expo-google-fonts/newsreader": "^0.4.1",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-voice/voice": "^3.2.4",
     "@react-navigation/bottom-tabs": "^7.16.2",
     "@react-navigation/native": "^7.2.5",
     "@react-navigation/stack": "^7.9.3",

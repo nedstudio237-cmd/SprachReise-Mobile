@@ -6,21 +6,32 @@ import { setupSpeaker } from '../../utils/audio';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { WORD_ORDER } from '../../data/vocabulary';
+import AiTutorButton from '../../components/AiTutorButton';
 
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+
+// Normalise la comparaison : retire les espaces avant ponctuation
+function normalizeAnswer(words) {
+  return words.join(' ')
+    .replace(/\s([,\.!?:])/g, '$1')
+    .trim();
+}
 
 export default function WordOrderScreen({ navigation }) {
   const { level, recordGameResult } = useAuthStore();
   const userLevel = level ?? 'A1';
   const pool = WORD_ORDER[userLevel] ?? WORD_ORDER.A1;
 
+  // Chaque mot porte un id unique pour gérer les doublons
   const [questions] = useState(() =>
-    [...pool].sort(() => Math.random() - 0.5).slice(0, 5).map((q) => ({
-      ...q, shuffled: shuffle(q.words),
-    }))
+    [...pool].sort(() => Math.random() - 0.5).slice(0, 5).map((q) => {
+      const indexed = q.words.map((w, i) => ({ id: `${w}_${i}`, text: w }));
+      return { ...q, shuffled: shuffle(indexed) };
+    })
   );
   const [current, setCurrent]   = useState(0);
-  const [selected, setSelected] = useState([]); // chosen words in order
+  // selected = tableau d'objets { id, text }
+  const [selected, setSelected] = useState([]);
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
@@ -28,7 +39,8 @@ export default function WordOrderScreen({ navigation }) {
 
   const question = questions[current];
   const progress = (current / questions.length) * 100;
-  const remaining = question.shuffled.filter((w) => !selected.includes(w));
+  const selectedIds = new Set(selected.map((s) => s.id));
+  const remaining = question.shuffled.filter((w) => !selectedIds.has(w.id));
 
   const speak = useCallback(async () => {
     if (speaking) return;
@@ -41,9 +53,9 @@ export default function WordOrderScreen({ navigation }) {
     });
   }, [question, speaking]);
 
-  const addWord = (word) => {
+  const addWord = (wordObj) => {
     if (showResult) return;
-    setSelected((s) => [...s, word]);
+    setSelected((s) => [...s, wordObj]);
   };
 
   const removeWord = (idx) => {
@@ -53,7 +65,7 @@ export default function WordOrderScreen({ navigation }) {
 
   const checkAnswer = () => {
     setShowResult(true);
-    const answer = selected.join(' ');
+    const answer = normalizeAnswer(selected.map((s) => s.text));
     if (answer === question.de) setScore((s) => s + 1);
   };
 
@@ -91,7 +103,7 @@ export default function WordOrderScreen({ navigation }) {
     );
   }
 
-  const isCorrect = selected.join(' ') === question.de;
+  const isCorrect = normalizeAnswer(selected.map((s) => s.text)) === question.de;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -125,7 +137,7 @@ export default function WordOrderScreen({ navigation }) {
             ) : (
               selected.map((w, i) => (
                 <TouchableOpacity
-                  key={`${w}-${i}`}
+                  key={w.id}
                   style={[
                     styles.answerChip,
                     showResult && isCorrect && styles.answerChipCorrect,
@@ -133,7 +145,7 @@ export default function WordOrderScreen({ navigation }) {
                   ]}
                   onPress={() => removeWord(i)}
                 >
-                  <Text style={styles.answerChipText}>{w}</Text>
+                  <Text style={styles.answerChipText}>{w.text}</Text>
                 </TouchableOpacity>
               ))
             )}
@@ -143,9 +155,9 @@ export default function WordOrderScreen({ navigation }) {
         {/* Mots disponibles */}
         {!showResult && (
           <View style={styles.wordsPool}>
-            {remaining.map((word, i) => (
-              <TouchableOpacity key={`${word}-${i}`} style={styles.wordChip} onPress={() => addWord(word)}>
-                <Text style={styles.wordChipText}>{word}</Text>
+            {remaining.map((wordObj) => (
+              <TouchableOpacity key={wordObj.id} style={styles.wordChip} onPress={() => addWord(wordObj)}>
+                <Text style={styles.wordChipText}>{wordObj.text}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -177,6 +189,14 @@ export default function WordOrderScreen({ navigation }) {
               <Text style={styles.checkBtnText}>VÉRIFIER  ✓</Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {showResult && !isCorrect && (
+          <AiTutorButton
+            question={`Pourquoi l'ordre correct est "${question.de}" ? Explique la règle de grammaire.`}
+            context={`L'étudiant a répondu : "${normalizeAnswer(selected.map((s) => s.text))}"`}
+            level={userLevel}
+          />
         )}
 
         {showResult && (
