@@ -3,12 +3,11 @@ import { Text } from 'react-native';
 import HomeScreen from '../screens/home/HomeScreen';
 import CoursesScreen from '../screens/courses/CoursesScreen';
 import LiveSessionsScreen from '../screens/live/LiveSessionsScreen';
-import QcmScreen from '../screens/qcm/QcmScreen';
+import CursusScreen from '../screens/cursus/CursusScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import { COLORS, FONTS } from '../constants/config';
 
 const Tab = createBottomTabNavigator();
-
 const TabIcon = (emoji) => ({ focused }) => (
   <Text style={{ fontSize: 19, opacity: focused ? 1 : 0.45 }}>{emoji}</Text>
 );
@@ -35,34 +34,11 @@ export default function MainTabs() {
         },
       }}
     >
-      <Tab.Screen
-        name="Accueil"
-        component={HomeScreen}
-        options={{ tabBarIcon: TabIcon('🏠') }}
-      />
-      <Tab.Screen
-        name="Cours"
-        component={CoursesScreen}
-        options={{ tabBarIcon: TabIcon('📚') }}
-      />
-      <Tab.Screen
-        name="Live"
-        component={LiveSessionsScreen}
-        options={{ tabBarIcon: TabIcon('📡') }}
-      />
-      <Tab.Screen
-        name="Qcm"
-        component={QcmScreen}
-        options={{
-          tabBarLabel: 'Cursus',
-          tabBarIcon: TabIcon('✏️'),
-        }}
-      />
-      <Tab.Screen
-        name="Profil"
-        component={ProfileScreen}
-        options={{ tabBarIcon: TabIcon('👤') }}
-      />
+      <Tab.Screen name="Accueil" component={HomeScreen}        options={{ tabBarIcon: TabIcon('🏠') }} />
+      <Tab.Screen name="Cours"   component={CoursesScreen}     options={{ tabBarIcon: TabIcon('📚') }} />
+      <Tab.Screen name="Live"    component={LiveSessionsScreen} options={{ tabBarIcon: TabIcon('📡') }} />
+      <Tab.Screen name="Cursus"  component={CursusScreen}      options={{ tabBarIcon: TabIcon('✏️') }} />
+      <Tab.Screen name="Profil"  component={ProfileScreen}     options={{ tabBarIcon: TabIcon('👤') }} />
     </Tab.Navigator>
   );
 }

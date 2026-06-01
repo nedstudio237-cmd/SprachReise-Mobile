@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, ActivityIndicator, Linking, Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
@@ -16,9 +17,14 @@ export default function CourseDetailScreen({ route, navigation }) {
   const [activeTab, setActiveTab] = useState('Description');
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { courseProgress } = useAuthStore();
+  const { courseProgress, notes, setNote } = useAuthStore();
   const progress = courseProgress[courseId];
   const courseCompleted = progress?.completed ?? false;
+  const [noteText, setNoteText] = useState('');
+
+  useEffect(() => {
+    if (courseId !== undefined) setNoteText(notes[courseId] ?? '');
+  }, [courseId, notes]);
 
   useEffect(() => {
     if (!courseId) { setLoading(false); return; }
@@ -141,16 +147,57 @@ export default function CourseDetailScreen({ route, navigation }) {
         )}
 
         {activeTab === 'Notes' && (
-          <View style={styles.notesEmpty}>
-            <Text style={styles.notesEmptyIcon}>📝</Text>
-            <Text style={styles.notesEmptyTitle}>Aucune note pour l'instant</Text>
-            <Text style={styles.notesEmptyText}>
-              Prenez des notes pendant vos cours pour les retrouver ici.
-            </Text>
-          </View>
+          <NotesTab
+            courseId={courseId}
+            noteText={noteText}
+            setNoteText={setNoteText}
+            setNote={setNote}
+          />
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function NotesTab({ courseId, noteText, setNoteText, setNote }) {
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    await setNote(courseId, noteText);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <View>
+      <View style={styles.notesHeader}>
+        <Text style={styles.sectionLabel}>MES NOTES</Text>
+        <Text style={styles.notesCount}>{noteText.length} / 2000</Text>
+      </View>
+      <TextInput
+        style={styles.notesInput}
+        value={noteText}
+        onChangeText={(v) => { if (v.length <= 2000) setNoteText(v); }}
+        placeholder="Écrivez vos notes, vocabulaire, points à retenir..."
+        placeholderTextColor={COLORS.muted}
+        multiline
+        textAlignVertical="top"
+      />
+      <TouchableOpacity
+        style={[styles.notesSaveBtn, saved && styles.notesSaveBtnDone]}
+        onPress={handleSave}
+      >
+        <Text style={styles.notesSaveBtnText}>
+          {saved ? '✓  NOTES SAUVEGARDÉES' : '💾  SAUVEGARDER MES NOTES'}
+        </Text>
+      </TouchableOpacity>
+      {noteText.length === 0 && (
+        <View style={styles.notesHintBox}>
+          <Text style={styles.notesHint}>💡 Astuce : notez les mots de vocabulaire nouveaux,
+            les règles de grammaire et les phrases exemples pour vous en souvenir plus facilement.</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -273,6 +320,27 @@ const styles = StyleSheet.create({
   qcmBtnLocked: { borderColor: 'rgba(126,102,58,0.3)' },
   qcmBtnText: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 13, letterSpacing: 1 },
   qcmBtnTextLocked: { color: COLORS.muted },
+
+  notesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  notesCount: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11 },
+  notesInput: {
+    backgroundColor: 'rgba(249,244,232,0.07)', borderWidth: 1,
+    borderColor: 'rgba(126,102,58,0.3)', borderRadius: 10,
+    padding: 14, color: COLORS.parchment, fontSize: 14,
+    fontFamily: FONTS.regular, minHeight: 200, marginBottom: 14,
+    lineHeight: 22,
+  },
+  notesSaveBtn: {
+    backgroundColor: COLORS.accent, borderRadius: 8,
+    padding: 14, alignItems: 'center', marginBottom: 16,
+  },
+  notesSaveBtnDone: { backgroundColor: '#10B981' },
+  notesSaveBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13, letterSpacing: 1 },
+  notesHintBox: {
+    backgroundColor: 'rgba(184,137,58,0.08)', borderRadius: 8,
+    padding: 14, borderWidth: 1, borderColor: 'rgba(184,137,58,0.2)',
+  },
+  notesHint: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 12, lineHeight: 19, fontStyle: 'italic' },
 
   pdfCard: {
     flexDirection: 'row', alignItems: 'center',

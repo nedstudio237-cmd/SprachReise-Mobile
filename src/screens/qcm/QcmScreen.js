@@ -5,10 +5,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
+import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 
 export default function QcmScreen({ route, navigation }) {
   const levelId = route?.params?.levelId ?? 1;
+  const qcmIdParam = route?.params?.qcmId ?? null;
+  const { recordQcmAttempt } = useAuthStore();
   const [qcm, setQcm] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,17 +27,25 @@ export default function QcmScreen({ route, navigation }) {
   const [aiModalVisible, setAiModalVisible] = useState(false);
 
   useEffect(() => {
-    api.get('/qcm', { params: { levelId } })
-      .then(({ data }) => {
-        if (data.length > 0) {
-          const first = data[0];
-          setQcm(first);
-          setQuestions(first.questions ?? []);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [levelId]);
+    if (qcmIdParam) {
+      // Charger un QCM spécifique depuis CursusScreen
+      api.get(`/qcm/${qcmIdParam}`)
+        .then(({ data }) => { setQcm(data); setQuestions(data.questions ?? []); })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    } else {
+      api.get('/qcm', { params: { levelId } })
+        .then(({ data }) => {
+          if (data.length > 0) {
+            const first = data[0];
+            setQcm(first);
+            setQuestions(first.questions ?? []);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, [levelId, qcmIdParam]);
 
   const question = questions[currentIndex];
   const progress = questions.length > 0 ? (currentIndex / questions.length) * 100 : 0;
@@ -63,11 +74,9 @@ export default function QcmScreen({ route, navigation }) {
   const submitAndFinish = async () => {
     try {
       await api.post(`/qcm/${qcm.id}/attempt`, {
-        score,
-        total: questions.length,
-        correct: score,
-        duration: 0,
+        score, total: questions.length, correct: score, duration: 0,
       });
+      await recordQcmAttempt(qcm.id, score, questions.length);
     } catch {}
     setFinished(true);
   };
