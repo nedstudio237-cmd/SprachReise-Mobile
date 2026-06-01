@@ -7,45 +7,78 @@ import MarkdownText from '../../components/MarkdownText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
+import { useChatStore } from '../../store/chatStore';
 import api from '../../services/api';
 
 const QUICK_QUESTIONS = [
-  { label: '📚 Explique le Dativ',    text: 'Explique le cas Dativ avec des exemples simples.' },
-  { label: '🔤 Conjugaison "sein"',   text: 'Comment conjuguer le verbe "sein" au présent ?' },
-  { label: '🔢 Les articles',         text: 'Quelle est la différence entre der, die, das ?' },
-  { label: '💬 Phrase type A1',       text: 'Donne-moi une phrase utile pour se présenter en allemand.' },
-  { label: '✏️ Corriger ma phrase',   text: 'Peux-tu corriger cette phrase : ' },
+  { label: '📚 Dativ',              text: 'Explique le cas Dativ avec des exemples simples.' },
+  { label: '🔤 Verbe "sein"',       text: 'Comment conjuguer "sein" au présent ?' },
+  { label: '🔢 der / die / das',    text: 'Quelle est la différence entre der, die, das ?' },
+  { label: '💬 Se présenter',       text: 'Donne-moi une phrase pour me présenter en allemand.' },
+  { label: '✏️ Corriger',           text: 'Peux-tu corriger cette phrase : ' },
 ];
+
+function makeWelcome(userLevel) {
+  return {
+    id: 'welcome',
+    role: 'assistant',
+    text: `Hallo! 👋 Je suis **Max**, ton tuteur d'allemand IA.\n\nJe suis là pour t'aider avec :\n- 📚 Grammaire et règles\n- 🔤 Vocabulaire et traduction\n- ✏️ Corriger tes phrases\n- 💡 Expliquer les concepts\n\nTu es au niveau **${userLevel}**. Pose-moi ta première question !`,
+  };
+}
 
 export default function AiTutorScreen({ navigation, route }) {
   const { level, user } = useAuthStore();
-  const userLevel = level ?? 'A1';
-  const initialContext = route?.params?.context ?? '';
-  const initialQuestion = route?.params?.question ?? '';
+  const { saveConversation } = useChatStore();
+
+  const userLevel   = level ?? 'A1';
+  const resumeConv  = route?.params?.resumeConv ?? null;   // reprendre une conv existante
+  const initialCtx  = route?.params?.context ?? '';
+  const initialQ    = route?.params?.question ?? '';
+
+  // ID de la conversation en cours (null = pas encore sauvegardée)
+  const convIdRef = useRef(resumeConv?.id ?? null);
+  const convContextRef = useRef(resumeConv?.context ?? initialCtx);
 
   const [messages, setMessages] = useState(() => {
-    const welcome = {
-      id: 'welcome',
-      role: 'assistant',
-      text: `Hallo! 👋 Je suis **Max**, ton tuteur d'allemand IA.\n\nJe suis là pour t'aider avec :\n📚 Grammaire et règles\n🔤 Vocabulaire et traduction\n✏️ Corriger tes phrases\n💡 Expliquer les concepts\n\nTu es actuellement au niveau **${userLevel}**. Pose-moi ta première question !`,
-    };
-    if (initialQuestion) {
-      return [welcome, { id: 'init_user', role: 'user', text: initialQuestion }];
+    if (resumeConv) {
+      // Reprendre une conversation existante : ajouter le message de bienvenue en tête
+      return [makeWelcome(userLevel), ...resumeConv.messages];
     }
+    const welcome = makeWelcome(userLevel);
+    if (initialQ) return [welcome, { id: 'init_user', role: 'user', text: initialQ }];
     return [welcome];
   });
+
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef(null);
 
-  // Envoyer la question initiale une seule fois après le premier rendu
+  // ── Sauvegarde automatique dès qu'il y a une réponse IA ──────────────
+  const autoSave = useCallback(async (msgs) => {
+    const realMsgs = msgs.filter((m) => m.id !== 'welcome');
+    if (realMsgs.length < 2) return;
+    const savedId = await saveConversation({
+      id:      convIdRef.current,
+      level:   userLevel,
+      context: convContextRef.current,
+      messages: realMsgs,
+    });
+    if (savedId && !convIdRef.current) convIdRef.current = savedId;
+  }, [userLevel, saveConversation]);
+
+  // ── Envoyer la question initiale une seule fois ───────────────────────
   const initSent = useRef(false);
   useEffect(() => {
-    if (initialQuestion && !initSent.current) {
+    if (initialQ && !initSent.current) {
       initSent.current = true;
-      setTimeout(() => sendMessage(initialQuestion), 400);
+      setTimeout(() => sendMessage(initialQ), 400);
     }
   }, []);
+
+  // ── Sauvegarde quand on quitte l'écran ───────────────────────────────
+  useEffect(() => {
+    return () => { autoSave(messages); };
+  }, [messages]);
 
   async function sendMessage(text) {
     const userText = (text ?? input).trim();
@@ -54,22 +87,31 @@ export default function AiTutorScreen({ navigation, route }) {
     setLoading(true);
 
     const userMsg = { id: Date.now().toString(), role: 'user', text: userText };
-    setMessages((prev) => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
 
-    // Construire l'historique (ignorer le message de bienvenue)
-    const history = [...messages.filter((m) => m.id !== 'welcome'), userMsg]
+    const history = nextMessages
+      .filter((m) => m.id !== 'welcome' && m.id !== 'init_user')
       .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+
+    // Ajouter le vrai message init_user s'il n'est pas encore dans history
+    const initMsg = nextMessages.find((m) => m.id === 'init_user');
+    if (initMsg && !history.find((h) => h.content === initMsg.text)) {
+      history.unshift({ role: 'user', content: initMsg.text });
+    }
 
     try {
       const { data } = await api.post('/ai/chat', {
-        level: userLevel,
-        context: initialContext,
+        level:     userLevel,
+        context:   convContextRef.current,
         firstName: user?.firstName ?? '',
-        city: user?.city ?? '',
-        messages: history,
+        city:      user?.city ?? '',
+        messages:  history,
       });
       const aiMsg = { id: (Date.now() + 1).toString(), role: 'assistant', text: data.reply };
-      setMessages((prev) => [...prev, aiMsg]);
+      const withAI = [...nextMessages, aiMsg];
+      setMessages(withAI);
+      autoSave(withAI);   // sauvegarde après chaque réponse IA
     } catch {
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -92,15 +134,16 @@ export default function AiTutorScreen({ navigation, route }) {
           </View>
         )}
         <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
-          {isUser ? (
-            <Text style={styles.bubbleTextUser}>{item.text}</Text>
-          ) : (
-            <MarkdownText>{item.text}</MarkdownText>
-          )}
+          {isUser
+            ? <Text style={styles.bubbleTextUser}>{item.text}</Text>
+            : <MarkdownText>{item.text}</MarkdownText>
+          }
         </View>
       </View>
     );
   }, []);
+
+  const isResumed = !!resumeConv;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -111,8 +154,14 @@ export default function AiTutorScreen({ navigation, route }) {
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>🤖 Tuteur IA Max</Text>
-          <Text style={styles.headerSub}>Niveau {userLevel} · Toujours disponible</Text>
+          <Text style={styles.headerSub}>
+            {isResumed ? `Reprise · ${resumeConv.messages.length} messages` : `Niveau ${userLevel} · Toujours disponible`}
+          </Text>
         </View>
+        {/* Bouton historique */}
+        <TouchableOpacity onPress={() => navigation?.navigate('ChatHistory')} style={styles.historyBtn}>
+          <Text style={styles.historyIcon}>🕐</Text>
+        </TouchableOpacity>
         <View style={styles.onlineDot} />
       </View>
 
@@ -121,7 +170,6 @@ export default function AiTutorScreen({ navigation, route }) {
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* Messages */}
         <FlatList
           ref={listRef}
           data={messages}
@@ -141,7 +189,7 @@ export default function AiTutorScreen({ navigation, route }) {
           ) : null}
         />
 
-        {/* Questions rapides (si premier message seulement) */}
+        {/* Questions rapides */}
         {messages.length <= 1 && (
           <View style={styles.quickContainer}>
             <Text style={styles.quickLabel}>Questions rapides :</Text>
@@ -152,10 +200,7 @@ export default function AiTutorScreen({ navigation, route }) {
               keyExtractor={(_, i) => i.toString()}
               contentContainerStyle={styles.quickList}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.quickChip}
-                  onPress={() => sendMessage(item.text)}
-                >
+                <TouchableOpacity style={styles.quickChip} onPress={() => sendMessage(item.text)}>
                   <Text style={styles.quickChipText}>{item.label}</Text>
                 </TouchableOpacity>
               )}
@@ -173,7 +218,6 @@ export default function AiTutorScreen({ navigation, route }) {
             placeholderTextColor={COLORS.muted}
             multiline
             maxLength={500}
-            onSubmitEditing={() => sendMessage()}
             returnKeyType="send"
           />
           <TouchableOpacity
@@ -191,7 +235,6 @@ export default function AiTutorScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.deep },
-
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
@@ -202,13 +245,12 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   headerTitle: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 15 },
   headerSub: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11, marginTop: 1 },
+  historyBtn: { padding: 6, marginRight: 6 },
+  historyIcon: { fontSize: 18 },
   onlineDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#10B981' },
-
   messagesList: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-
   bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 12 },
   bubbleRowUser: { flexDirection: 'row-reverse' },
-
   avatar: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: 'rgba(184,137,58,0.2)',
@@ -216,25 +258,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   avatarText: { fontSize: 16 },
-
-  bubble: {
-    maxWidth: '78%', borderRadius: 16, padding: 12,
-  },
+  bubble: { maxWidth: '78%', borderRadius: 16, padding: 12 },
   bubbleAI: {
     backgroundColor: 'rgba(245,239,227,0.08)',
     borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
     borderBottomLeftRadius: 4,
   },
-  bubbleUser: {
-    backgroundColor: COLORS.accent,
-    borderBottomRightRadius: 4,
-  },
-  bubbleText: {
-    fontFamily: FONTS.regular, color: COLORS.cream,
-    fontSize: 14, lineHeight: 22,
-  },
-  bubbleTextUser: { color: COLORS.parchment },
-
+  bubbleUser: { backgroundColor: COLORS.accent, borderBottomRightRadius: 4 },
+  bubbleTextUser: { fontFamily: FONTS.regular, color: COLORS.parchment, fontSize: 14, lineHeight: 22 },
   typingIndicator: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
   typingBubble: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -243,7 +274,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
   },
   typingText: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 13, fontStyle: 'italic' },
-
   quickContainer: {
     paddingHorizontal: 16, paddingVertical: 8,
     borderTopWidth: 1, borderTopColor: 'rgba(126,102,58,0.15)',
@@ -256,7 +286,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(184,137,58,0.3)',
   },
   quickChipText: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 12 },
-
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end',
     paddingHorizontal: 16, paddingVertical: 10,

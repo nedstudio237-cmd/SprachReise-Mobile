@@ -133,6 +133,15 @@ export default function ProfileScreen({ navigation }) {
           </>
         )}
 
+        {/* ── Tuteur IA ── */}
+        <Text style={styles.sectionLabel}>TUTEUR IA</Text>
+        <View style={styles.menu}>
+          <MenuItem label="Historique des conversations" icon="🕐"
+            onPress={() => navigation?.navigate('ChatHistory')} />
+          <MenuItem label="Nouvelle conversation" icon="🤖"
+            onPress={() => navigation?.navigate('AiTutor')} />
+        </View>
+
         {/* ── Mon compte ── */}
         <Text style={styles.sectionLabel}>MON COMPTE</Text>
         <View style={styles.menu}>
@@ -187,9 +196,9 @@ function CriteriaChip({ label, done, color }) {
   );
 }
 
-function MenuItem({ label, icon, badge }) {
+function MenuItem({ label, icon, badge, onPress }) {
   return (
-    <TouchableOpacity style={styles.menuItem}>
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>{icon}</Text></View>
       <Text style={styles.menuLabel}>{label}</Text>
       {badge && <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{badge}</Text></View>}
