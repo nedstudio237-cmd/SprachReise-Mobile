@@ -62,7 +62,7 @@ export default function RegisterScreen({ navigation }) {
       });
       navigation.navigate('Pricing', {
         authData: {
-          user: { email: data.email, firstName: data.firstName, lastName: data.lastName, role: data.role },
+          user: { id: data.id, email: data.email, firstName: data.firstName, lastName: data.lastName, role: data.role, photoUrl: data.photoUrl ?? null },
           accessToken: data.accessToken,
         },
       });

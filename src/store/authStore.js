@@ -39,7 +39,7 @@ async function loadUserData(email) {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 export const useAuthStore = create((set, get) => ({
-  user:        null,
+  user:        null,   // { id, email, firstName, lastName, role, photoUrl }
   accessToken: null,
   isLoading:   true,
 

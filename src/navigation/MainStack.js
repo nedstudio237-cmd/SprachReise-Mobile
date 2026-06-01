@@ -12,6 +12,11 @@ import WordOrderScreen from '../screens/cursus/WordOrderScreen';
 import AiTutorScreen from '../screens/ai/AiTutorScreen';
 import ChatHistoryScreen from '../screens/ai/ChatHistoryScreen';
 import ProgressScreen from '../screens/home/ProgressScreen';
+import CreateCourseScreen from '../screens/trainer/CreateCourseScreen';
+import CreateSessionScreen from '../screens/trainer/CreateSessionScreen';
+import CreateQcmScreen from '../screens/trainer/CreateQcmScreen';
+import TrainerExamsScreen from '../screens/trainer/TrainerExamsScreen';
+import ConversationScreen from '../screens/messages/ConversationScreen';
 
 const Stack = createStackNavigator();
 
@@ -30,7 +35,12 @@ export default function MainStack() {
       <Stack.Screen name="WordOrder"    component={WordOrderScreen} />
       <Stack.Screen name="AiTutor"      component={AiTutorScreen} />
       <Stack.Screen name="ChatHistory"  component={ChatHistoryScreen} />
-      <Stack.Screen name="Progress"     component={ProgressScreen} />
+      <Stack.Screen name="Progress"       component={ProgressScreen} />
+      <Stack.Screen name="CreateCourse"   component={CreateCourseScreen} />
+      <Stack.Screen name="CreateSession"  component={CreateSessionScreen} />
+      <Stack.Screen name="CreateQcm"      component={CreateQcmScreen} />
+      <Stack.Screen name="TrainerExams"   component={TrainerExamsScreen} />
+      <Stack.Screen name="Conversation"   component={ConversationScreen} />
     </Stack.Navigator>
   );
 }

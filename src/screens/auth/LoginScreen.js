@@ -23,7 +23,14 @@ export default function LoginScreen({ navigation }) {
     try {
       const { data } = await authAPI.login(email.trim().toLowerCase(), password);
       await setAuth(
-        { email: data.email, firstName: data.firstName, lastName: data.lastName, role: data.role },
+        {
+          id: data.id,
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          role: data.role,
+          photoUrl: data.photoUrl ?? null,
+        },
         data.accessToken
       );
     } catch (err) {
