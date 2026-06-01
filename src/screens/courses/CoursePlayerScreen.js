@@ -5,9 +5,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video, ResizeMode } from 'expo-av';
+import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, FONTS, API_BASE_URL } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
@@ -16,17 +16,44 @@ import AiTutorButton from '../../components/AiTutorButton';
 const { width: SCREEN_W } = Dimensions.get('window');
 const VIDEO_H = Math.round(SCREEN_W * 9 / 16); // 16:9
 
-// ─── Helpers URL ─────────────────────────────────────────────────────────────
-const BASE = API_BASE_URL.replace('/api', '');
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function videoUrl(videoPath) {
-  if (!videoPath) return null;
-  // videoPath ex: "courses/a1/01_alphabet.mp4"
-  return `${API_BASE_URL}/files/courses/video/${videoPath}`;
+/** Retourne { type: 'youtube'|'direct'|null, value: string } */
+function parseVideoPath(videoPath) {
+  if (!videoPath) return { type: null, value: null };
+  if (videoPath.startsWith('yt:')) {
+    return { type: 'youtube', value: videoPath.slice(3) };
+  }
+  return { type: 'direct', value: `${API_BASE_URL}/files/courses/video/${videoPath}` };
 }
 
 function pdfUrl(courseId) {
   return `${API_BASE_URL}/files/courses/pdf/course_${courseId}.pdf`;
+}
+
+function youtubeEmbedHtml(videoId) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; background:#000; }
+    body { background:#000; overflow:hidden; }
+    .container { position:relative; width:100vw; height:100vh; }
+    iframe { position:absolute; top:0; left:0; width:100%; height:100%; border:none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <iframe
+      src="https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1&playsinline=1&cc_load_policy=0&hl=fr"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowfullscreen>
+    </iframe>
+  </div>
+</body>
+</html>`;
 }
 
 // ─── Chapitres générés depuis la durée ────────────────────────────────────────
@@ -72,55 +99,53 @@ function formatTime(secs) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// ─── Composant Lecteur Vidéo ──────────────────────────────────────────────────
-function VideoPlayer({ uri, onPositionChange, chapterStartSecs }) {
+// ─── Lecteur YouTube (WebView) ────────────────────────────────────────────────
+function YouTubePlayer({ videoId }) {
+  const [loading, setLoading] = useState(true);
+  return (
+    <View style={styles.videoContainer}>
+      <WebView
+        source={{ html: youtubeEmbedHtml(videoId) }}
+        style={styles.video}
+        allowsFullscreenVideo
+        allowsInlineMediaPlayback
+        mediaPlaybackRequiresUserAction={false}
+        javaScriptEnabled
+        domStorageEnabled
+        onLoadEnd={() => setLoading(false)}
+        scrollEnabled={false}
+        bounces={false}
+      />
+      {loading && (
+        <View style={styles.videoLoading}>
+          <ActivityIndicator color={COLORS.gold} size="large" />
+          <Text style={styles.videoLoadingText}>Chargement de la vidéo…</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Lecteur MP4 direct (expo-av) ─────────────────────────────────────────────
+function DirectPlayer({ uri }) {
   const videoRef = useRef(null);
   const [status, setStatus] = useState({});
   const [isReady, setIsReady] = useState(false);
 
   const isPlaying = status.isPlaying ?? false;
-  const duration = (status.durationMillis ?? 0) / 1000;
-  const position = (status.positionMillis ?? 0) / 1000;
-  const progress = duration > 0 ? position / duration : 0;
+  const duration  = (status.durationMillis ?? 0) / 1000;
+  const position  = (status.positionMillis ?? 0) / 1000;
+  const progress  = duration > 0 ? position / duration : 0;
 
-  useEffect(() => {
-    onPositionChange?.(position);
-  }, [Math.floor(position)]);
-
-  const togglePlay = useCallback(async () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return;
-    if (isPlaying) {
-      await videoRef.current.pauseAsync();
-    } else {
-      await videoRef.current.playAsync();
-    }
-  }, [isPlaying]);
+    isPlaying ? await videoRef.current.pauseAsync() : await videoRef.current.playAsync();
+  };
 
-  const seekTo = useCallback(async (ratio) => {
+  const seekTo = async (ratio) => {
     if (!videoRef.current || !duration) return;
     await videoRef.current.setPositionAsync(ratio * duration * 1000);
-  }, [duration]);
-
-  const skipTo = useCallback(async (startSec) => {
-    if (!videoRef.current) return;
-    await videoRef.current.setPositionAsync(startSec * 1000);
-  }, []);
-
-  useEffect(() => {
-    if (isReady && chapterStartSecs !== undefined) {
-      skipTo(chapterStartSecs);
-    }
-  }, [chapterStartSecs, isReady]);
-
-  if (!uri) {
-    return (
-      <View style={[styles.videoContainer, styles.videoPlaceholder]}>
-        <Text style={styles.videoPlaceholderIcon}>🎬</Text>
-        <Text style={styles.videoPlaceholderText}>Vidéo en cours de téléchargement</Text>
-        <Text style={styles.videoPlaceholderSub}>Disponible prochainement</Text>
-      </View>
-    );
-  }
+  };
 
   return (
     <View style={styles.videoContainer}>
@@ -135,42 +160,45 @@ function VideoPlayer({ uri, onPositionChange, chapterStartSecs }) {
         onReadyForDisplay={() => setIsReady(true)}
         onError={() => {}}
       />
-
-      {/* Overlay contrôles */}
       <View style={styles.videoOverlay}>
-        {/* Bouton play/pause central */}
         <TouchableOpacity style={styles.playBtn} onPress={togglePlay} activeOpacity={0.8}>
           <Text style={styles.playBtnIcon}>{isPlaying ? '⏸' : '▶'}</Text>
         </TouchableOpacity>
-
-        {/* Barre de progression en bas */}
         <View style={styles.videoBottom}>
           <Text style={styles.videoTime}>{formatTime(position)}</Text>
-
-          <TouchableOpacity
-            style={styles.seekBar}
+          <TouchableOpacity style={styles.seekBar} activeOpacity={1}
             onPress={(e) => {
-              const { locationX, target } = e.nativeEvent;
-              e.target.measure((x, y, w) => seekTo(locationX / w));
-            }}
-            activeOpacity={1}
-          >
+              e.target.measure((_x, _y, w) => seekTo(e.nativeEvent.locationX / w));
+            }}>
             <View style={styles.seekTrack}>
               <View style={[styles.seekFill, { width: `${progress * 100}%` }]} />
               <View style={[styles.seekThumb, { left: `${progress * 100}%` }]} />
             </View>
           </TouchableOpacity>
-
           <Text style={styles.videoTime}>{formatTime(duration)}</Text>
         </View>
       </View>
-
-      {/* Spinner pendant le chargement */}
-      {!isReady && uri && (
+      {!isReady && (
         <View style={styles.videoLoading}>
           <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
       )}
+    </View>
+  );
+}
+
+// ─── Sélecteur de lecteur ─────────────────────────────────────────────────────
+function VideoPlayer({ videoPath }) {
+  const { type, value } = parseVideoPath(videoPath);
+
+  if (type === 'youtube') return <YouTubePlayer videoId={value} />;
+  if (type === 'direct')  return <DirectPlayer uri={value} />;
+
+  return (
+    <View style={[styles.videoContainer, styles.videoPlaceholder]}>
+      <Text style={styles.videoPlaceholderIcon}>🎬</Text>
+      <Text style={styles.videoPlaceholderText}>Vidéo disponible prochainement</Text>
+      <Text style={styles.videoPlaceholderSub}>Place le fichier MP4 dans /storage/courses/</Text>
     </View>
   );
 }
@@ -184,7 +212,6 @@ export default function CoursePlayerScreen({ route, navigation }) {
   const [currentChapter, setCurrentChapter] = useState(0);
   const [readChapters, setReadChapters] = useState(new Set());
   const [pdfDownloading, setPdfDownloading] = useState(false);
-  const [videoPosition, setVideoPosition] = useState(0);
 
   const { courseProgress, updateCourseProgress } = useAuthStore();
 
@@ -204,17 +231,6 @@ export default function CoursePlayerScreen({ route, navigation }) {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [courseId]);
-
-  // Détecte le chapitre actuel selon la position vidéo
-  useEffect(() => {
-    if (!chapters.length) return;
-    const idx = chapters.findIndex(
-      (ch, i) =>
-        videoPosition >= ch.startSec &&
-        (i === chapters.length - 1 || videoPosition < chapters[i + 1].startSec),
-    );
-    if (idx >= 0 && idx !== currentChapter) setCurrentChapter(idx);
-  }, [Math.floor(videoPosition / 5)]); // check toutes les 5 secondes
 
   const markCurrentRead = async () => {
     const next = new Set(readChapters);
@@ -256,7 +272,6 @@ export default function CoursePlayerScreen({ route, navigation }) {
   const allDone = chapters.length > 0 && readChapters.size >= chapters.length;
   const progress = chapters.length > 0 ? readChapters.size / chapters.length : 0;
   const chapter = chapters[currentChapter];
-  const chapterStartSecs = chapter?.startSec;
 
   if (loading) {
     return (
@@ -269,11 +284,7 @@ export default function CoursePlayerScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* ── Lecteur vidéo ── */}
-      <VideoPlayer
-        uri={videoUrl(course?.videoPath)}
-        onPositionChange={setVideoPosition}
-        chapterStartSecs={chapterStartSecs}
-      />
+      <VideoPlayer videoPath={course?.videoPath} />
 
       {/* ── En-tête titre ── */}
       <View style={styles.header}>
@@ -443,7 +454,10 @@ const styles = StyleSheet.create({
   videoLoading: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.6)', gap: 10,
+  },
+  videoLoadingText: {
+    fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 12,
   },
 
   // ── Header ──
