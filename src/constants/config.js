@@ -1,5 +1,4 @@
-// URL backend — tunnel fixe (fonctionne sur n'importe quel réseau)
-export const API_BASE_URL = 'https://sprachreise237.loca.lt/api';
+export const API_BASE_URL = 'http://172.20.10.7:8090/api';
 
 export const COLORS = {
   primary: '#7E663A',
