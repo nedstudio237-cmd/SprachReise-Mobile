@@ -1,14 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  TextInput, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
-import Voice from '@react-native-voice/voice';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { PRONOUNCE } from '../../data/vocabulary';
 import api from '../../services/api';
 
-// Levenshtein normalisé (0→1)
+// --- Chargement conditionnel de Voice (non disponible dans Expo Go) ---
+let Voice = null;
+let voiceAvailable = false;
+try {
+  Voice = require('@react-native-voice/voice').default;
+  voiceAvailable = true;
+} catch (_) {
+  voiceAvailable = false;
+}
+
+// --- Similarité Levenshtein normalisée ---
 function similarity(a, b) {
   const s1 = a.toLowerCase().replace(/[^a-zäöüß\s]/g, '').trim();
   const s2 = b.toLowerCase().replace(/[^a-zäöüß\s]/g, '').trim();
@@ -35,7 +47,7 @@ function scoreLabel(pct) {
   return               { emoji: '💪', label: 'À revoir',     color: '#EF4444' };
 }
 
-const STATE = { IDLE: 'idle', LISTENING: 'listening', ANALYZING: 'analyzing', RESULT: 'result' };
+const ST = { IDLE: 'idle', LISTENING: 'listening', ANALYZING: 'analyzing', RESULT: 'result' };
 
 export default function PronounceScreen({ navigation }) {
   const { level, recordGameResult } = useAuthStore();
@@ -45,36 +57,35 @@ export default function PronounceScreen({ navigation }) {
   const [questions] = useState(() => [...pool].sort(() => Math.random() - 0.5).slice(0, 6));
   const [current, setCurrent] = useState(0);
   const [speaking, setSpeaking] = useState(false);
-  const [exState, setExState] = useState(STATE.IDLE);
+  const [exState, setExState] = useState(ST.IDLE);
   const [transcript, setTranscript] = useState('');
+  const [typedInput, setTypedInput] = useState('');
   const [result, setResult] = useState(null);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
-  const [voiceError, setVoiceError] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
 
   const question = questions[current];
   const progress = (current / questions.length) * 100;
   const transcriptRef = useRef('');
 
+  // Setup Voice natif si disponible
   useEffect(() => {
-    Voice.onSpeechStart   = () => { setExState(STATE.LISTENING); setVoiceError(null); };
-    Voice.onSpeechEnd     = () => analyzeTranscript(transcriptRef.current);
-    Voice.onSpeechError   = () => {
-      setVoiceError('Microphone non disponible. Vérifiez les permissions micro.');
-      setExState(STATE.IDLE);
-    };
+    if (!voiceAvailable || !Voice) return;
+    Voice.onSpeechStart   = () => { setExState(ST.LISTENING); };
+    Voice.onSpeechEnd     = () => analyzeText(transcriptRef.current);
+    Voice.onSpeechError   = () => setExState(ST.IDLE);
     Voice.onSpeechResults = (e) => {
-      const text = e?.value?.[0] ?? '';
-      transcriptRef.current = text;
-      setTranscript(text);
+      const t = e?.value?.[0] ?? '';
+      transcriptRef.current = t;
+      setTranscript(t);
     };
     Voice.onSpeechPartialResults = (e) => {
-      const text = e?.value?.[0] ?? '';
-      transcriptRef.current = text;
-      setTranscript(text);
+      const t = e?.value?.[0] ?? '';
+      transcriptRef.current = t;
+      setTranscript(t);
     };
-    return () => { Voice.destroy().then(Voice.removeAllListeners).catch(() => {}); };
+    return () => { Voice?.destroy().then(() => Voice?.removeAllListeners()).catch(() => {}); };
   }, []);
 
   const speakModel = useCallback(() => {
@@ -88,23 +99,20 @@ export default function PronounceScreen({ navigation }) {
   }, [question, speaking]);
 
   const startListening = async () => {
+    if (!voiceAvailable || !Voice) return;
     transcriptRef.current = '';
     setTranscript('');
-    setVoiceError(null);
-    try {
-      await Voice.start('de-DE');
-    } catch {
-      setVoiceError('Impossible de démarrer le microphone.');
-    }
+    try { await Voice.start('de-DE'); } catch { setExState(ST.IDLE); }
   };
 
   const stopListening = async () => {
+    if (!voiceAvailable || !Voice) return;
     try { await Voice.stop(); } catch {}
   };
 
-  const analyzeTranscript = async (text) => {
-    if (!text) { setExState(STATE.IDLE); return; }
-    setExState(STATE.ANALYZING);
+  const analyzeText = async (text) => {
+    if (!text.trim()) { setExState(ST.IDLE); return; }
+    setExState(ST.ANALYZING);
     const pct = Math.round(similarity(text, question.de) * 100);
     const { emoji, label, color } = scoreLabel(pct);
 
@@ -114,7 +122,7 @@ export default function PronounceScreen({ navigation }) {
       try {
         const { data } = await api.post('/ai/explain', {
           level: userLevel,
-          question: `L'étudiant a dit "${text}" au lieu de "${question.de}". Donne un conseil de prononciation court (1-2 phrases max).`,
+          question: `L'étudiant a dit/écrit "${text}" au lieu de "${question.de}". Donne un conseil de prononciation en 1-2 phrases.`,
           context: `Phonétique correcte : [${question.phonetic}]`,
           mode: 'explain',
         });
@@ -125,15 +133,18 @@ export default function PronounceScreen({ navigation }) {
 
     if (pct >= 65) setScore((s) => s + 1);
     setResult({ pct, emoji, label, color, aiTip, heard: text });
-    setExState(STATE.RESULT);
+    setExState(ST.RESULT);
   };
+
+  const handleCheckTyped = () => analyzeText(typedInput);
 
   const handleNext = async () => {
     Speech.stop();
     transcriptRef.current = '';
     setTranscript('');
+    setTypedInput('');
     setResult(null);
-    setExState(STATE.IDLE);
+    setExState(ST.IDLE);
     if (current < questions.length - 1) {
       setCurrent((c) => c + 1);
     } else {
@@ -143,8 +154,8 @@ export default function PronounceScreen({ navigation }) {
   };
 
   const handleRestart = () => {
-    setCurrent(0); setExState(STATE.IDLE); setTranscript('');
-    setResult(null); setScore(0); setFinished(false);
+    setCurrent(0); setExState(ST.IDLE); setTranscript('');
+    setTypedInput(''); setResult(null); setScore(0); setFinished(false);
   };
 
   if (finished) {
@@ -168,122 +179,150 @@ export default function PronounceScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => { Speech.stop(); Voice.cancel().catch(() => {}); navigation?.goBack(); }}>
-          <Text style={styles.back}>‹ Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.counter}>{current + 1} / {questions.length}</Text>
-        <View style={styles.scoreBadge}><Text style={styles.scoreText}>⭐ {score}</Text></View>
-      </View>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${progress}%` }]} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.gameTag}>🎤 PRONONCIATION — {userLevel}</Text>
-
-        <View style={styles.wordCard}>
-          <Text style={styles.wordDE}>{question.de}</Text>
-          <Text style={styles.wordFR}>{question.fr}</Text>
-          <View style={styles.phoneticBox}>
-            <Text style={styles.phoneticLabel}>Phonétique :</Text>
-            <Text style={styles.phonetic}>[{question.phonetic}]</Text>
-          </View>
-        </View>
-
-        {/* Étape 1 */}
-        <View style={styles.stepRow}>
-          <View style={styles.stepNum}><Text style={styles.stepNumText}>1</Text></View>
-          <Text style={styles.stepLabel}>Écoute le modèle</Text>
-        </View>
-        <TouchableOpacity style={[styles.listenBtn, speaking && styles.listenBtnActive]} onPress={speakModel}>
-          <Text style={styles.listenIcon}>{speaking ? '🔊' : '▶'}</Text>
-          <Text style={styles.listenLabel}>{speaking ? 'Lecture...' : 'ÉCOUTER LE MODÈLE'}</Text>
-        </TouchableOpacity>
-
-        {/* Étape 2 */}
-        <View style={styles.stepRow}>
-          <View style={styles.stepNum}><Text style={styles.stepNumText}>2</Text></View>
-          <Text style={styles.stepLabel}>
-            {exState === STATE.LISTENING ? 'Parlez maintenant...' : 'Appuie et répète la phrase'}
-          </Text>
-        </View>
-
-        {exState !== STATE.RESULT && (
-          <TouchableOpacity
-            style={[
-              styles.recordBtn,
-              exState === STATE.LISTENING && styles.recordBtnActive,
-              exState === STATE.ANALYZING && { opacity: 0.6 },
-            ]}
-            onPress={exState === STATE.LISTENING ? stopListening : startListening}
-            disabled={exState === STATE.ANALYZING}
-          >
-            <Text style={styles.recordIcon}>
-              {exState === STATE.LISTENING ? '⏹' : exState === STATE.ANALYZING ? '⏳' : '🎙️'}
-            </Text>
-            <Text style={styles.recordLabel}>
-              {exState === STATE.LISTENING  ? 'APPUYER POUR ARRÊTER' :
-               exState === STATE.ANALYZING ? 'Analyse en cours...' :
-               'APPUYER POUR PARLER'}
-            </Text>
-            {exState === STATE.LISTENING && <View style={styles.recordDot} />}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => { Speech.stop(); navigation?.goBack(); }}>
+            <Text style={styles.back}>‹ Retour</Text>
           </TouchableOpacity>
-        )}
+          <Text style={styles.counter}>{current + 1} / {questions.length}</Text>
+          <View style={styles.scoreBadge}><Text style={styles.scoreText}>⭐ {score}</Text></View>
+        </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${progress}%` }]} />
+        </View>
 
-        {/* Transcript temps réel */}
-        {exState === STATE.LISTENING && transcript.length > 0 && (
-          <View style={styles.liveTranscript}>
-            <Text style={styles.liveTranscriptText}>"{transcript}"</Text>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <Text style={styles.gameTag}>🎤 PRONONCIATION — {userLevel}</Text>
+
+          {/* Carte du mot */}
+          <View style={styles.wordCard}>
+            <Text style={styles.wordDE}>{question.de}</Text>
+            <Text style={styles.wordFR}>{question.fr}</Text>
+            <View style={styles.phoneticBox}>
+              <Text style={styles.phoneticLabel}>Phonétique :</Text>
+              <Text style={styles.phonetic}>[{question.phonetic}]</Text>
+            </View>
           </View>
-        )}
 
-        {voiceError && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{voiceError}</Text>
+          {/* Étape 1 — Écouter */}
+          <View style={styles.stepRow}>
+            <View style={styles.stepNum}><Text style={styles.stepNumText}>1</Text></View>
+            <Text style={styles.stepLabel}>Écoute le modèle</Text>
           </View>
-        )}
+          <TouchableOpacity style={[styles.listenBtn, speaking && styles.listenBtnActive]} onPress={speakModel}>
+            <Text style={styles.listenIcon}>{speaking ? '🔊' : '▶'}</Text>
+            <Text style={styles.listenLabel}>{speaking ? 'Lecture...' : 'ÉCOUTER LE MODÈLE'}</Text>
+          </TouchableOpacity>
 
-        {/* Résultat automatique */}
-        {exState === STATE.RESULT && result && (
-          <>
-            <View style={[styles.scoreResultCard, { borderColor: result.color + '60' }]}>
-              <Text style={styles.scoreResultEmoji}>{result.emoji}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.scoreResultLabel, { color: result.color }]}>{result.label}</Text>
-                <Text style={styles.scoreResultPct}>{result.pct}% de similarité</Text>
-                <View style={styles.scoreBar}>
-                  <View style={[styles.scoreBarFill, { width: `${result.pct}%`, backgroundColor: result.color }]} />
+          {/* Étape 2 — Parler OU saisir */}
+          <View style={styles.stepRow}>
+            <View style={styles.stepNum}><Text style={styles.stepNumText}>2</Text></View>
+            <Text style={styles.stepLabel}>
+              {voiceAvailable ? 'Appuie et répète la phrase' : 'Écris la phrase en allemand'}
+            </Text>
+          </View>
+
+          {exState !== ST.RESULT && (
+            voiceAvailable ? (
+              /* Mode micro natif */
+              <TouchableOpacity
+                style={[
+                  styles.recordBtn,
+                  exState === ST.LISTENING && styles.recordBtnActive,
+                  exState === ST.ANALYZING && { opacity: 0.6 },
+                ]}
+                onPress={exState === ST.LISTENING ? stopListening : startListening}
+                disabled={exState === ST.ANALYZING}
+              >
+                <Text style={styles.recordIcon}>
+                  {exState === ST.LISTENING  ? '⏹' :
+                   exState === ST.ANALYZING ? '⏳' : '🎙️'}
+                </Text>
+                <Text style={styles.recordLabel}>
+                  {exState === ST.LISTENING  ? 'APPUYER POUR ARRÊTER' :
+                   exState === ST.ANALYZING ? 'Analyse...' : 'APPUYER POUR PARLER'}
+                </Text>
+                {exState === ST.LISTENING && <View style={styles.recordDot} />}
+              </TouchableOpacity>
+            ) : (
+              /* Mode texte — compatible Expo Go */
+              <View style={styles.typeMode}>
+                <View style={styles.expoBadge}>
+                  <Text style={styles.expoBadgeText}>
+                    ℹ️  Micro natif indisponible dans Expo Go — saisissez la phrase pour vérification
+                  </Text>
+                </View>
+                <TextInput
+                  style={styles.typeInput}
+                  value={typedInput}
+                  onChangeText={setTypedInput}
+                  placeholder="Écris la phrase en allemand..."
+                  placeholderTextColor={COLORS.muted}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  spellCheck={false}
+                />
+                <TouchableOpacity
+                  style={[styles.checkBtn, !typedInput.trim() && { opacity: 0.4 }]}
+                  onPress={handleCheckTyped}
+                  disabled={!typedInput.trim() || exState === ST.ANALYZING}
+                >
+                  <Text style={styles.checkBtnText}>
+                    {exState === ST.ANALYZING ? 'Analyse...' : 'VÉRIFIER  ✓'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )
+          )}
+
+          {/* Transcript temps réel (mode micro) */}
+          {exState === ST.LISTENING && transcript.length > 0 && (
+            <View style={styles.liveTranscript}>
+              <Text style={styles.liveTranscriptText}>"{transcript}"</Text>
+            </View>
+          )}
+
+          {/* Résultat automatique */}
+          {exState === ST.RESULT && result && (
+            <>
+              <View style={[styles.scoreResultCard, { borderColor: result.color + '60' }]}>
+                <Text style={styles.scoreResultEmoji}>{result.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.scoreResultLabel, { color: result.color }]}>{result.label}</Text>
+                  <Text style={styles.scoreResultPct}>{result.pct}% de similarité</Text>
+                  <View style={styles.scoreBar}>
+                    <View style={[styles.scoreBarFill, { width: `${result.pct}%`, backgroundColor: result.color }]} />
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.heardBox}>
-              <Text style={styles.heardLabel}>🎙 Entendu :</Text>
-              <Text style={styles.heardText}>"{result.heard}"</Text>
-              <Text style={styles.heardLabel}>✓ Correct :</Text>
-              <Text style={styles.heardCorrect}>{question.de}</Text>
-            </View>
-
-            {aiLoading ? (
-              <View style={styles.aiLoadingBox}>
-                <Text style={styles.aiLoadingText}>🤖 Le tuteur IA analyse votre prononciation...</Text>
+              <View style={styles.heardBox}>
+                <Text style={styles.heardLabel}>{voiceAvailable ? '🎙 Entendu :' : '✏️ Saisi :'}</Text>
+                <Text style={styles.heardText}>"{result.heard}"</Text>
+                <Text style={styles.heardLabel}>✓ Correct :</Text>
+                <Text style={styles.heardCorrect}>{question.de}</Text>
               </View>
-            ) : result.aiTip ? (
-              <View style={styles.aiTipBox}>
-                <Text style={styles.aiTipTitle}>💡 CONSEIL DU TUTEUR IA</Text>
-                <Text style={styles.aiTipText}>{result.aiTip}</Text>
-              </View>
-            ) : null}
 
-            <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
-              <Text style={styles.nextBtnText}>
-                {current < questions.length - 1 ? 'SUIVANT  ›' : 'VOIR MON SCORE'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </ScrollView>
+              {aiLoading ? (
+                <View style={styles.aiLoadingBox}>
+                  <Text style={styles.aiLoadingText}>🤖 Le tuteur IA analyse votre prononciation...</Text>
+                </View>
+              ) : result.aiTip ? (
+                <View style={styles.aiTipBox}>
+                  <Text style={styles.aiTipTitle}>💡 CONSEIL DU TUTEUR IA</Text>
+                  <Text style={styles.aiTipText}>{result.aiTip}</Text>
+                </View>
+              ) : null}
+
+              <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
+                <Text style={styles.nextBtnText}>
+                  {current < questions.length - 1 ? 'SUIVANT  ›' : 'VOIR MON SCORE'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -329,13 +368,25 @@ const styles = StyleSheet.create({
   recordIcon: { fontSize: 32 },
   recordLabel: { fontFamily: FONTS.uiBold, color: '#EC4899', fontSize: 13 },
   recordDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginLeft: 4 },
+  typeMode: { marginBottom: 12 },
+  expoBadge: {
+    backgroundColor: 'rgba(59,130,246,0.1)', borderRadius: 8, padding: 10, marginBottom: 12,
+    borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)',
+  },
+  expoBadgeText: { fontFamily: FONTS.regular, color: '#93C5FD', fontSize: 12, lineHeight: 18 },
+  typeInput: {
+    backgroundColor: 'rgba(249,244,232,0.07)', borderWidth: 1.5,
+    borderColor: 'rgba(126,102,58,0.4)', borderRadius: 10,
+    padding: 14, color: COLORS.parchment, fontSize: 16,
+    fontFamily: FONTS.regular, marginBottom: 12,
+  },
+  checkBtn: { backgroundColor: '#EC4899', borderRadius: 8, padding: 14, alignItems: 'center' },
+  checkBtnText: { fontFamily: FONTS.uiBold, color: '#fff', fontSize: 13, letterSpacing: 1.5 },
   liveTranscript: {
     backgroundColor: 'rgba(236,72,153,0.07)', borderRadius: 8, padding: 12, marginBottom: 12,
     borderWidth: 1, borderColor: 'rgba(236,72,153,0.2)', alignItems: 'center',
   },
   liveTranscriptText: { fontFamily: FONTS.medium, color: '#EC4899', fontSize: 15, fontStyle: 'italic' },
-  errorBox: { backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#EF444440' },
-  errorText: { fontFamily: FONTS.regular, color: '#EF4444', fontSize: 13, textAlign: 'center' },
   scoreResultCard: {
     flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 16,
     borderWidth: 1.5, backgroundColor: 'rgba(245,239,227,0.04)', marginBottom: 14, gap: 14,
