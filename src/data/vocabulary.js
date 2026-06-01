@@ -81,6 +81,110 @@ export const FILL_BLANK = {
   ],
 };
 
+// ── Audio exercises ─────────────────────────────────────────────────────────
+
+// Listen & Choose: hear audio → pick correct translation
+export const LISTEN_CHOOSE = {
+  A1: [
+    { de:'Guten Morgen!',      fr:'Bonjour ! (matin)',    wrong:['Bonsoir !','Au revoir !','Merci !'] },
+    { de:'Wie heißen Sie?',    fr:'Comment vous appelez-vous ?', wrong:['Comment allez-vous ?','D\'où venez-vous ?','Quel âge avez-vous ?'] },
+    { de:'Ich komme aus Kamerun.', fr:'Je viens du Cameroun.',  wrong:['J\'habite au Cameroun.','Je suis camerounais.','Je visite le Cameroun.'] },
+    { de:'Das Buch ist groß.', fr:'Le livre est grand.',  wrong:['Le livre est petit.','Le livre est beau.','Le livre est vieux.'] },
+    { de:'Ich habe Hunger.',   fr:'J\'ai faim.',          wrong:['J\'ai soif.','Je suis fatigué.','J\'ai froid.'] },
+    { de:'Wo ist der Bahnhof?',fr:'Où est la gare ?',     wrong:['Où est l\'hôtel ?','Quand part le train ?','Combien coûte le billet ?'] },
+    { de:'Es ist halb neun.', fr:'Il est neuf heures et demie.',wrong:['Il est neuf heures.','Il est huit heures et demie.','Il est dix heures.'] },
+    { de:'Ich lerne Deutsch.', fr:'J\'apprends l\'allemand.', wrong:['Je parle allemand.','J\'aime l\'allemand.','Je comprends l\'allemand.'] },
+  ],
+  A2: [
+    { de:'Können Sie mir helfen?',  fr:'Pouvez-vous m\'aider ?',   wrong:['Avez-vous besoin d\'aide ?','Je peux vous aider.','Où puis-je vous aider ?'] },
+    { de:'Ich hätte gern einen Kaffee.', fr:'Je voudrais un café.', wrong:['J\'aime le café.','Avez-vous du café ?','Le café est prêt.'] },
+    { de:'Der Zug fährt um 10 Uhr ab.', fr:'Le train part à 10h.', wrong:['Le train arrive à 10h.','Le train est à 10h.','Le train passe à 10h.'] },
+    { de:'Wie viel kostet das?',    fr:'Combien ça coûte ?',        wrong:['C\'est gratuit ?','Avez-vous des remises ?','Quel est le prix total ?'] },
+    { de:'Mir geht es gut, danke.', fr:'Je vais bien, merci.',      wrong:['Je suis malade, merci.','Ça va mal, merci.','Je suis fatigué, merci.'] },
+  ],
+  B1: [
+    { de:'Das ist meiner Meinung nach falsch.', fr:'C\'est faux selon moi.', wrong:['C\'est juste selon moi.','Je ne sais pas.','Peut-être que c\'est vrai.'] },
+    { de:'Ich würde gern mehr verdienen.', fr:'J\'aimerais gagner plus.', wrong:['Je gagne assez.','Je veux travailler plus.','Je cherche un emploi.'] },
+    { de:'Obwohl es regnet, gehe ich spazieren.', fr:'Bien qu\'il pleuve, je me promène.', wrong:['Parce qu\'il pleut, je reste.','Il pleut donc je sors.','Quand il pleut, je marche.'] },
+  ],
+};
+
+// Dictée: hear audio → type what you heard
+export const DICTEE = {
+  A1: [
+    { de:'Guten Tag!',              hint:'Salutation de la journée' },
+    { de:'Ich heiße Marie.',        hint:'Se présenter — le nom' },
+    { de:'Das ist ein Buch.',       hint:'Article indéfini + objet' },
+    { de:'Wie alt bist du?',        hint:'Question sur l\'âge' },
+    { de:'Ich wohne in Berlin.',    hint:'Lieu de résidence' },
+    { de:'Danke schön!',            hint:'Remercier poliment' },
+    { de:'Auf Wiedersehen!',        hint:'Formule d\'au revoir' },
+    { de:'Sprechen Sie Deutsch?',   hint:'Demander si on parle allemand' },
+  ],
+  A2: [
+    { de:'Was kostet das Ticket?',          hint:'Demander le prix' },
+    { de:'Ich hätte gern ein Zimmer.',      hint:'Réserver une chambre' },
+    { de:'Der Zug kommt um acht Uhr.',      hint:'Heure d\'arrivée' },
+    { de:'Können Sie das wiederholen?',     hint:'Demander de répéter' },
+    { de:'Ich habe gestern gekocht.',       hint:'Passé composé (Perfekt)' },
+  ],
+  B1: [
+    { de:'Meiner Meinung nach ist das falsch.',    hint:'Exprimer son opinion' },
+    { de:'Ich würde gern nach Deutschland reisen.',hint:'Konjunktiv II + voyage' },
+    { de:'Das Buch wurde von Goethe geschrieben.', hint:'Voix passive' },
+  ],
+};
+
+// Pronunciation: see text → record yourself → playback & compare
+export const PRONOUNCE = {
+  A1: [
+    { de:'Guten Morgen!',      phonetic:'Gou-ten Mor-gen',    fr:'Bonjour ! (matin)' },
+    { de:'Wie geht es Ihnen?', phonetic:'Vi guet es I-nen',   fr:'Comment allez-vous ?' },
+    { de:'Ich heiße...',       phonetic:'Ich haï-ssé',        fr:'Je m\'appelle...' },
+    { de:'Auf Wiedersehen!',   phonetic:'Auf Vi-der-ze-en',   fr:'Au revoir !' },
+    { de:'Danke schön!',       phonetic:'Dan-ké cheun',       fr:'Merci beaucoup !' },
+    { de:'Entschuldigung!',    phonetic:'Ent-choul-di-goung', fr:'Excusez-moi !' },
+    { de:'Deutschland',        phonetic:'Doïtch-land',        fr:'L\'Allemagne' },
+    { de:'Ich spreche Deutsch.',phonetic:'Ich chpré-ché Doïtch', fr:'Je parle allemand.' },
+  ],
+  A2: [
+    { de:'Können Sie mir helfen?',   phonetic:'Keu-nen Zi mir hel-fen', fr:'Pouvez-vous m\'aider ?' },
+    { de:'Wo ist der Bahnhof?',      phonetic:'Vo ist der Ban-hof',     fr:'Où est la gare ?' },
+    { de:'Ich hätte gern einen Kaffee.', phonetic:'Ich hé-té guern ai-nen Ka-fé', fr:'Je voudrais un café.' },
+    { de:'Das Wetter ist schön.',    phonetic:'Das Vé-ter ist cheun',   fr:'Le temps est beau.' },
+  ],
+  B1: [
+    { de:'Meiner Meinung nach...', phonetic:'Mai-ner Maï-noung nach', fr:'Selon moi...' },
+    { de:'Das ist kompliziert.',   phonetic:'Das ist kom-pli-tsiert',  fr:'C\'est compliqué.' },
+    { de:'Ich würde gern...',      phonetic:'Ich vür-de guern',        fr:'J\'aimerais...' },
+  ],
+};
+
+// Word order: hear audio → put words in correct order
+export const WORD_ORDER = {
+  A1: [
+    { de:'Ich heiße Marie.',         words:['Ich','heiße','Marie','.'],           audio:'Ich heiße Marie.' },
+    { de:'Das ist ein Buch.',         words:['Das','ist','ein','Buch','.'],         audio:'Das ist ein Buch.' },
+    { de:'Wie heißen Sie?',           words:['Wie','heißen','Sie','?'],             audio:'Wie heißen Sie?' },
+    { de:'Ich komme aus Kamerun.',    words:['Ich','komme','aus','Kamerun','.'],    audio:'Ich komme aus Kamerun.' },
+    { de:'Guten Morgen, wie geht es?',words:['Guten','Morgen',',','wie','geht','es','?'], audio:'Guten Morgen, wie geht es?' },
+    { de:'Der Hund ist groß.',        words:['Der','Hund','ist','groß','.'],        audio:'Der Hund ist groß.' },
+  ],
+  A2: [
+    { de:'Können Sie mir helfen?',    words:['Können','Sie','mir','helfen','?'],    audio:'Können Sie mir helfen?' },
+    { de:'Ich hätte gern einen Kaffee.', words:['Ich','hätte','gern','einen','Kaffee','.'], audio:'Ich hätte gern einen Kaffee.' },
+    { de:'Der Zug fährt um zehn Uhr ab.', words:['Der','Zug','fährt','um','zehn','Uhr','ab','.'], audio:'Der Zug fährt um zehn Uhr ab.' },
+  ],
+  B1: [
+    { de:'Obwohl es regnet, gehe ich spazieren.',
+      words:['Obwohl','es','regnet',',','gehe','ich','spazieren','.'],
+      audio:'Obwohl es regnet, gehe ich spazieren.' },
+    { de:'Das Buch wurde von Goethe geschrieben.',
+      words:['Das','Buch','wurde','von','Goethe','geschrieben','.'],
+      audio:'Das Buch wurde von Goethe geschrieben.' },
+  ],
+};
+
 export function getRandomWords(level, count = 6) {
   const pool = WORD_MATCH[level] ?? WORD_MATCH.A1;
   const shuffled = [...pool].sort(() => Math.random() - 0.5);

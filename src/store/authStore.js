@@ -21,7 +21,14 @@ export const useAuthStore = create((set, get) => ({
   qcmAttempts: [],
 
   // Stats mini-jeux { wordMatch: { played, correct }, fillBlank: { played, correct } }
-  gameStats: { wordMatch: { played: 0, correct: 0 }, fillBlank: { played: 0, correct: 0 } },
+  gameStats: {
+    wordMatch: { played: 0, correct: 0 },
+    fillBlank: { played: 0, correct: 0 },
+    listenChoose: { played: 0, correct: 0 },
+    dictee: { played: 0, correct: 0 },
+    pronounce: { played: 0, correct: 0 },
+    wordOrder: { played: 0, correct: 0 },
+  },
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   setAuth: async (user, accessToken) => {
@@ -108,7 +115,11 @@ export const useAuthStore = create((set, get) => ({
           courseProgress: progressStr ? JSON.parse(progressStr) : {},
           notes: notesStr ? JSON.parse(notesStr) : {},
           qcmAttempts: qcmStr ? JSON.parse(qcmStr) : [],
-          gameStats: gameStr ? JSON.parse(gameStr) : { wordMatch: { played: 0, correct: 0 }, fillBlank: { played: 0, correct: 0 } },
+          gameStats: gameStr ? JSON.parse(gameStr) : {
+          wordMatch:{played:0,correct:0}, fillBlank:{played:0,correct:0},
+          listenChoose:{played:0,correct:0}, dictee:{played:0,correct:0},
+          pronounce:{played:0,correct:0}, wordOrder:{played:0,correct:0},
+        },
           isLoading: false,
         });
       } else {

@@ -93,56 +93,55 @@ export default function CursusScreen({ navigation }) {
         {/* ── Mini-jeux ── */}
         <Text style={[styles.sectionLabel, { marginTop: 24 }]}>MINI-JEUX</Text>
 
-        <TouchableOpacity
-          style={[styles.gameCard, styles.gameCardGold]}
-          onPress={() => navigation?.navigate('WordMatch')}
-          activeOpacity={0.82}
-        >
-          <View style={styles.gameCardInner}>
-            <Text style={styles.gameEmoji}>🃏</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.gameTitle}>Association de mots</Text>
-              <Text style={styles.gameDesc}>Retrouvez la traduction française du mot allemand affiché.</Text>
-              {wmPlayed > 0 && (
-                <Text style={styles.gameStat}>
-                  {wmCorrect}/{wmPlayed} bonnes réponses ({Math.round((wmCorrect/wmPlayed)*100)}%)
-                </Text>
-              )}
-            </View>
-            <Text style={styles.gameArrow}>›</Text>
-          </View>
-          <View style={styles.gameTags}>
-            <View style={styles.gameTag}><Text style={styles.gameTagText}>Vocabulaire</Text></View>
-            <View style={styles.gameTag}><Text style={styles.gameTagText}>{userLevel}</Text></View>
-          </View>
-        </TouchableOpacity>
+        {/* Jeux vocabulaire/grammaire */}
+        <GameCard emoji="🃏" title="Association de mots" desc="Mot allemand → traduction française"
+          color="#B8893A" tag="Vocabulaire" level={userLevel}
+          onPress={() => navigation?.navigate('WordMatch')} />
+        <GameCard emoji="✏️" title="Compléter la phrase" desc="Choisissez le mot manquant"
+          color="#8B5CF6" tag="Grammaire" level={userLevel}
+          onPress={() => navigation?.navigate('FillBlank')} />
 
-        <TouchableOpacity
-          style={[styles.gameCard, styles.gameCardPurple]}
-          onPress={() => navigation?.navigate('FillBlank')}
-          activeOpacity={0.82}
-        >
-          <View style={styles.gameCardInner}>
-            <Text style={styles.gameEmoji}>✏️</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.gameTitle}>Compléter la phrase</Text>
-              <Text style={styles.gameDesc}>Choisissez le mot manquant dans la phrase allemande.</Text>
-              {fbPlayed > 0 && (
-                <Text style={styles.gameStat}>
-                  {fbCorrect}/{fbPlayed} bonnes réponses ({Math.round((fbCorrect/fbPlayed)*100)}%)
-                </Text>
-              )}
-            </View>
-            <Text style={styles.gameArrow}>›</Text>
-          </View>
-          <View style={styles.gameTags}>
-            <View style={styles.gameTag}><Text style={styles.gameTagText}>Grammaire</Text></View>
-            <View style={styles.gameTag}><Text style={styles.gameTagText}>{userLevel}</Text></View>
-          </View>
-        </TouchableOpacity>
+        {/* Exercices audio */}
+        <Text style={[styles.sectionLabel, { marginTop: 8 }]}>EXERCICES AUDIO 🎧</Text>
+        <GameCard emoji="🔊" title="Écoute & Choisis" desc="Écoute la phrase, trouve la bonne traduction"
+          color="#3B82F6" tag="Écoute" level={userLevel}
+          onPress={() => navigation?.navigate('ListenChoose')} />
+        <GameCard emoji="📝" title="Dictée" desc="Écoute et écris ce que tu entends"
+          color="#10B981" tag="Compréhension" level={userLevel}
+          onPress={() => navigation?.navigate('Dictee')} />
+        <GameCard emoji="🎤" title="Prononciation" desc="Écoute, répète et évalue ta prononciation"
+          color="#EC4899" tag="Expression orale" level={userLevel}
+          onPress={() => navigation?.navigate('Pronounce')} />
+        <GameCard emoji="🃏" title="Ordre des mots" desc="Écoute et remets les mots dans le bon ordre"
+          color="#F59E0B" tag="Structure" level={userLevel}
+          onPress={() => navigation?.navigate('WordOrder')} />
 
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function GameCard({ emoji, title, desc, color, tag, level, onPress }) {
+  return (
+    <TouchableOpacity
+      style={[styles.gameCard, { borderColor: color + '40', backgroundColor: color + '0D' }]}
+      onPress={onPress} activeOpacity={0.82}
+    >
+      <View style={styles.gameCardInner}>
+        <Text style={styles.gameEmoji}>{emoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.gameTitle}>{title}</Text>
+          <Text style={styles.gameDesc}>{desc}</Text>
+        </View>
+        <Text style={[styles.gameArrow, { color }]}>›</Text>
+      </View>
+      <View style={styles.gameTags}>
+        <View style={[styles.gameTag, { backgroundColor: color + '20' }]}>
+          <Text style={[styles.gameTagText, { color }]}>{tag}</Text>
+        </View>
+        <View style={styles.gameTag}><Text style={styles.gameTagText}>{level}</Text></View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
