@@ -9,6 +9,7 @@ import ListenChooseScreen from '../screens/cursus/ListenChooseScreen';
 import DicteeScreen from '../screens/cursus/DicteeScreen';
 import PronounceScreen from '../screens/cursus/PronounceScreen';
 import WordOrderScreen from '../screens/cursus/WordOrderScreen';
+import AiTutorScreen from '../screens/ai/AiTutorScreen';
 
 const Stack = createStackNavigator();
 
@@ -25,6 +26,7 @@ export default function MainStack() {
       <Stack.Screen name="Dictee"       component={DicteeScreen} />
       <Stack.Screen name="Pronounce"    component={PronounceScreen} />
       <Stack.Screen name="WordOrder"    component={WordOrderScreen} />
+      <Stack.Screen name="AiTutor"      component={AiTutorScreen} />
     </Stack.Navigator>
   );
 }

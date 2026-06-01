@@ -116,7 +116,30 @@ export default function CursusScreen({ navigation }) {
           color="#F59E0B" tag="Structure" level={userLevel}
           onPress={() => navigation?.navigate('WordOrder')} />
 
+        {/* Accès direct au Tuteur IA */}
+        <TouchableOpacity
+          style={styles.aiCard}
+          onPress={() => navigation?.navigate('AiTutor')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.aiCardEmoji}>🤖</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.aiCardTitle}>Tuteur IA Max</Text>
+            <Text style={styles.aiCardDesc}>Pose n'importe quelle question sur l'allemand</Text>
+          </View>
+          <Text style={styles.aiCardArrow}>›</Text>
+        </TouchableOpacity>
+
       </ScrollView>
+
+      {/* Bouton flottant Tuteur IA */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation?.navigate('AiTutor')}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.fabText}>🤖</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -206,4 +229,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
   },
   gameTagText: { fontFamily: FONTS.uiMedium, color: COLORS.muted, fontSize: 11 },
+
+  aiCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(184,137,58,0.1)', borderRadius: 14, padding: 18,
+    borderWidth: 1.5, borderColor: 'rgba(184,137,58,0.35)', marginBottom: 80,
+  },
+  aiCardEmoji: { fontSize: 36, marginRight: 14 },
+  aiCardTitle: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 16, marginBottom: 3 },
+  aiCardDesc: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 13 },
+  aiCardArrow: { color: COLORS.gold, fontSize: 24 },
+
+  fab: {
+    position: 'absolute', bottom: 24, right: 20,
+    width: 54, height: 54, borderRadius: 27,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 8, elevation: 8,
+  },
+  fabText: { fontSize: 24 },
 });
