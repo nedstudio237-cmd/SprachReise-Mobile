@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
@@ -17,7 +18,7 @@ const QUICK_QUESTIONS = [
 ];
 
 export default function AiTutorScreen({ navigation, route }) {
-  const { level } = useAuthStore();
+  const { level, user } = useAuthStore();
   const userLevel = level ?? 'A1';
   const initialContext = route?.params?.context ?? '';
   const initialQuestion = route?.params?.question ?? '';
@@ -37,23 +38,25 @@ export default function AiTutorScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const listRef = useRef(null);
 
-  // Si une question initiale est passée, la soumettre automatiquement
+  // Envoyer la question initiale une seule fois après le premier rendu
   const initSent = useRef(false);
-  if (initialQuestion && !initSent.current) {
-    initSent.current = true;
-    setTimeout(() => sendMessage(initialQuestion), 300);
-  }
+  useEffect(() => {
+    if (initialQuestion && !initSent.current) {
+      initSent.current = true;
+      setTimeout(() => sendMessage(initialQuestion), 400);
+    }
+  }, []);
 
   async function sendMessage(text) {
     const userText = (text ?? input).trim();
     if (!userText || loading) return;
     setInput('');
+    setLoading(true);
 
     const userMsg = { id: Date.now().toString(), role: 'user', text: userText };
     setMessages((prev) => [...prev, userMsg]);
-    setLoading(true);
 
-    // Construire l'historique pour l'API (ignorer le message de bienvenue)
+    // Construire l'historique (ignorer le message de bienvenue)
     const history = [...messages.filter((m) => m.id !== 'welcome'), userMsg]
       .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
 
@@ -61,6 +64,8 @@ export default function AiTutorScreen({ navigation, route }) {
       const { data } = await api.post('/ai/chat', {
         level: userLevel,
         context: initialContext,
+        firstName: user?.firstName ?? '',
+        city: user?.city ?? '',
         messages: history,
       });
       const aiMsg = { id: (Date.now() + 1).toString(), role: 'assistant', text: data.reply };
@@ -87,9 +92,11 @@ export default function AiTutorScreen({ navigation, route }) {
           </View>
         )}
         <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
-          <Text style={[styles.bubbleText, isUser && styles.bubbleTextUser]}>
-            {item.text}
-          </Text>
+          {isUser ? (
+            <Text style={styles.bubbleTextUser}>{item.text}</Text>
+          ) : (
+            <Markdown style={markdownStyles}>{item.text}</Markdown>
+          )}
         </View>
       </View>
     );
@@ -181,6 +188,25 @@ export default function AiTutorScreen({ navigation, route }) {
     </SafeAreaView>
   );
 }
+
+// Styles pour le rendu Markdown des réponses IA
+const markdownStyles = {
+  body:        { color: COLORS.cream, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, lineHeight: 22 },
+  strong:      { color: COLORS.parchment, fontFamily: 'PlusJakartaSans_700Bold' },
+  em:          { color: COLORS.cream, fontStyle: 'italic' },
+  heading1:    { color: COLORS.gold, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, marginBottom: 6, marginTop: 4 },
+  heading2:    { color: COLORS.gold, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, marginBottom: 4, marginTop: 4 },
+  heading3:    { color: COLORS.parchment, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 14, marginBottom: 4 },
+  bullet_list: { marginVertical: 4 },
+  ordered_list:{ marginVertical: 4 },
+  list_item:   { marginBottom: 4 },
+  bullet_list_icon: { color: COLORS.gold, marginRight: 6 },
+  code_inline: { backgroundColor: 'rgba(184,137,58,0.15)', color: COLORS.gold, borderRadius: 4, paddingHorizontal: 5, fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13 },
+  fence:       { backgroundColor: 'rgba(184,137,58,0.1)', borderRadius: 8, padding: 10, marginVertical: 6 },
+  blockquote:  { backgroundColor: 'rgba(245,239,227,0.05)', borderLeftWidth: 3, borderLeftColor: COLORS.gold, paddingLeft: 10, marginVertical: 4 },
+  paragraph:   { marginBottom: 6 },
+  hr:          { borderBottomColor: 'rgba(126,102,58,0.3)', marginVertical: 8 },
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.deep },

@@ -5,11 +5,20 @@ import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { getRandomSentences } from '../../data/vocabulary';
 
+// Mélange les options et met à jour l'index correct
+function shuffleOptions(questions) {
+  return questions.map((q) => {
+    const correctWord = q.options[q.correct];
+    const shuffled = [...q.options].sort(() => Math.random() - 0.5);
+    return { ...q, options: shuffled, correct: shuffled.indexOf(correctWord) };
+  });
+}
+
 export default function FillBlankScreen({ navigation }) {
   const { level, recordGameResult } = useAuthStore();
   const userLevel = level ?? 'A1';
 
-  const [questions] = useState(() => getRandomSentences(userLevel, 6));
+  const [questions] = useState(() => shuffleOptions(getRandomSentences(userLevel, 6)));
   const [current, setCurrent]   = useState(0);
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
