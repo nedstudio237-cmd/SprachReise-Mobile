@@ -66,7 +66,11 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
 
-        <View style={styles.progressCard}>
+        <TouchableOpacity
+          style={styles.progressCard}
+          onPress={() => navigation?.navigate('Progress')}
+          activeOpacity={0.88}
+        >
           <View style={styles.progressCardTop}>
             <View>
               <Text style={styles.progressCardLabel}>NIVEAU ACTUEL</Text>
@@ -79,8 +83,11 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
           </View>
-          <Text style={styles.progressSub}>{completedCount} / {totalCourses} cours complétés</Text>
-        </View>
+          <View style={styles.progressFooter}>
+            <Text style={styles.progressSub}>{completedCount} / {totalCourses} cours complétés</Text>
+            <Text style={styles.progressLink}>Voir le détail →</Text>
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.quickActions}>
           <QuickAction emoji="📖" label="Cours" onPress={() => navigation?.navigate('Cours')} />
@@ -184,7 +191,9 @@ const styles = StyleSheet.create({
   progressCircleText: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 13 },
   progressBar: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 4, height: 5, marginBottom: 8 },
   progressFill: { backgroundColor: COLORS.gold, borderRadius: 4, height: 5 },
+  progressFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   progressSub: { fontFamily: FONTS.ui, color: 'rgba(249,244,232,0.55)', fontSize: 12 },
+  progressLink: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 11, letterSpacing: 0.5 },
 
   quickActions: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 28 },
   quickItem: { alignItems: 'center', flex: 1 },

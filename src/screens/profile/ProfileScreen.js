@@ -96,6 +96,14 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
+        <TouchableOpacity
+          style={styles.progressDetailBtn}
+          onPress={() => navigation?.navigate('Progress')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.progressDetailBtnText}>📈  Voir ma progression détaillée →</Text>
+        </TouchableOpacity>
+
         {/* ── Stats détaillées ── */}
         <Text style={styles.sectionLabel}>MES STATISTIQUES</Text>
         <View style={styles.detailGrid}>
@@ -245,6 +253,15 @@ const styles = StyleSheet.create({
   progressCircleText: { fontFamily: FONTS.uiBold, fontSize: 13 },
   progressBar: { height: 5, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 3, marginBottom: 12 },
   progressFill: { height: 5, borderRadius: 3 },
+  progressDetailBtn: {
+    backgroundColor: 'rgba(184,137,58,0.12)',
+    borderRadius: 10, padding: 14, marginBottom: 20,
+    borderWidth: 1, borderColor: 'rgba(184,137,58,0.3)',
+    alignItems: 'center',
+  },
+  progressDetailBtnText: {
+    fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 13, letterSpacing: 0.5,
+  },
   criteriaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   criteriaChip: {
     borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
