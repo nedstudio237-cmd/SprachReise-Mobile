@@ -62,9 +62,9 @@ export default function AiTutorScreen({ navigation, route }) {
       level:   userLevel,
       context: convContextRef.current,
       messages: realMsgs,
-    });
+    }, user?.id);
     if (savedId && !convIdRef.current) convIdRef.current = savedId;
-  }, [userLevel, saveConversation]);
+  }, [userLevel, saveConversation, user?.id]);
 
   // ── Envoyer la question initiale une seule fois ───────────────────────
   const initSent = useRef(false);

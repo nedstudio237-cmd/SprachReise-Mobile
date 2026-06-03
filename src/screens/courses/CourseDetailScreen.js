@@ -5,6 +5,8 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { API_BASE_URL } from '../../constants/config';
@@ -202,7 +204,8 @@ function NotesTab({ courseId, noteText, setNoteText, setNote }) {
 }
 
 function DocumentsTab({ course }) {
-  const BASE = API_BASE_URL.replace('/api', '');
+  const { accessToken } = useAuthStore();
+  const [downloading, setDownloading] = useState(false);
 
   if (!course?.pdfPath) {
     return (
@@ -214,14 +217,31 @@ function DocumentsTab({ course }) {
     );
   }
 
-  const pdfUrl = `${BASE}/api/files/${course.pdfPath}`;
-  const filename = `SprachReise_${course.levelCode}_${course.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+  const rel    = course.pdfPath.startsWith('courses/') ? course.pdfPath : `courses/pdf/${course.pdfPath}`;
+  const pdfUrl = `${API_BASE_URL}/files/${rel}`;
+  const safeName = `SprachReise_${(course.title ?? 'cours').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
 
   const openPdf = async () => {
+    if (downloading) return;
+    setDownloading(true);
     try {
-      await Linking.openURL(pdfUrl);
-    } catch {
-      Alert.alert('Erreur', 'Impossible d\'ouvrir le PDF.');
+      const localUri = FileSystem.cacheDirectory + safeName;
+      const { status } = await FileSystem.downloadAsync(pdfUrl, localUri, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (status !== 200) throw new Error(`HTTP ${status}`);
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(localUri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: `${course.title} — PDF`,
+        });
+      }
+    } catch (e) {
+      Alert.alert('Erreur', `Impossible d'ouvrir le PDF.\n${e.message}`);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -240,12 +260,12 @@ function DocumentsTab({ course }) {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.pdfOpenBtn} onPress={openPdf}>
-        <Text style={styles.pdfOpenBtnText}>📖  CONSULTER LE PDF</Text>
+      <TouchableOpacity style={[styles.pdfOpenBtn, downloading && { opacity: 0.6 }]} onPress={openPdf} disabled={downloading}>
+        <Text style={styles.pdfOpenBtnText}>{downloading ? '⏳  Téléchargement…' : '📖  CONSULTER LE PDF'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.pdfDownloadBtn} onPress={openPdf}>
-        <Text style={styles.pdfDownloadBtnText}>⬇  TÉLÉCHARGER</Text>
+      <TouchableOpacity style={[styles.pdfDownloadBtn, downloading && { opacity: 0.6 }]} onPress={openPdf} disabled={downloading}>
+        <Text style={styles.pdfDownloadBtnText}>{downloading ? '⏳  Téléchargement…' : '⬇  TÉLÉCHARGER'}</Text>
       </TouchableOpacity>
 
       <Text style={styles.pdfHint}>

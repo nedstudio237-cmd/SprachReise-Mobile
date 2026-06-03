@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video, ResizeMode } from 'expo-av';
 import { WebView } from 'react-native-webview';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { COLORS, FONTS, API_BASE_URL } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
@@ -21,14 +21,22 @@ const VIDEO_H = Math.round(SCREEN_W * 9 / 16); // 16:9
 /** Retourne { type: 'youtube'|'direct'|null, value: string } */
 function parseVideoPath(videoPath) {
   if (!videoPath) return { type: null, value: null };
-  if (videoPath.startsWith('yt:')) {
-    return { type: 'youtube', value: videoPath.slice(3) };
-  }
-  return { type: 'direct', value: `${API_BASE_URL}/files/courses/video/${videoPath}` };
+  if (videoPath.startsWith('yt:')) return { type: 'youtube', value: videoPath.slice(3) };
+  if (videoPath.startsWith('http')) return { type: 'direct', value: videoPath };
+  // Le chemin stocké est déjà relatif ex: "courses/video/uuid.mp4"
+  // ou parfois juste le nom de fichier — on normalise
+  const relative = videoPath.startsWith('courses/') ? videoPath : `courses/video/${videoPath}`;
+  return { type: 'direct', value: `${API_BASE_URL}/files/${relative}` };
 }
 
-function pdfUrl(courseId) {
-  return `${API_BASE_URL}/files/courses/pdf/course_${courseId}.pdf`;
+/** Construit l'URL du PDF depuis le chemin stocké en BDD */
+function buildPdfUrl(course) {
+  if (!course) return null;
+  if (course.pdfPath) {
+    const rel = course.pdfPath.startsWith('courses/') ? course.pdfPath : `courses/pdf/${course.pdfPath}`;
+    return `${API_BASE_URL}/files/${rel}`;
+  }
+  return null;
 }
 
 function youtubeEmbedHtml(videoId) {
@@ -213,7 +221,7 @@ export default function CoursePlayerScreen({ route, navigation }) {
   const [readChapters, setReadChapters] = useState(new Set());
   const [pdfDownloading, setPdfDownloading] = useState(false);
 
-  const { courseProgress, updateCourseProgress } = useAuthStore();
+  const { courseProgress, updateCourseProgress, accessToken } = useAuthStore();
 
   useEffect(() => {
     if (!courseId) { setLoading(false); return; }
@@ -243,26 +251,31 @@ export default function CoursePlayerScreen({ route, navigation }) {
   };
 
   const openPdf = async () => {
-    if (!courseId) return;
-    const url = pdfUrl(courseId);
-    const localUri = FileSystem.cacheDirectory + `course_${courseId}.pdf`;
+    const url = buildPdfUrl(course);
+    if (!url) { Alert.alert('PDF non disponible', 'Ce cours n\'a pas encore de PDF.'); return; }
+
+    const safeName = `course_${courseId}_${Date.now()}.pdf`;
+    const localUri = FileSystem.cacheDirectory + safeName;
     setPdfDownloading(true);
     try {
-      const info = await FileSystem.getInfoAsync(localUri);
-      if (!info.exists) {
-        await FileSystem.downloadAsync(url, localUri);
-      }
+      // Télécharger avec auth JWT
+      const { status } = await FileSystem.downloadAsync(url, localUri, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (status !== 200) throw new Error(`HTTP ${status}`);
+
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(localUri, {
           mimeType: 'application/pdf',
-          dialogTitle: `${course?.title} — Document PDF`,
+          UTI: 'com.adobe.pdf',
+          dialogTitle: `${course?.title} — Support PDF`,
         });
       } else {
-        Alert.alert('PDF', `Fichier téléchargé : ${localUri}`);
+        Alert.alert('PDF téléchargé', `Fichier disponible dans : ${localUri}`);
       }
-    } catch {
-      Alert.alert('Erreur', 'Impossible de charger le PDF. Vérifiez la connexion.');
+    } catch (e) {
+      Alert.alert('Erreur PDF', `Impossible de charger le PDF.\n${e.message}`);
     } finally {
       setPdfDownloading(false);
     }

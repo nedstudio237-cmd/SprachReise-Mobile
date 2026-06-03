@@ -39,9 +39,10 @@ async function loadUserData(email) {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 export const useAuthStore = create((set, get) => ({
-  user:        null,   // { id, email, firstName, lastName, role, photoUrl }
-  accessToken: null,
-  isLoading:   true,
+  user:          null,   // { id, email, firstName, lastName, role, photoUrl }
+  accessToken:   null,
+  trainerStatus: null,   // PENDING | APPROVED | REJECTED (formateurs uniquement)
+  isLoading:     true,
 
   // Profil apprenant (propre à l'utilisateur connecté)
   language: null,
@@ -54,31 +55,29 @@ export const useAuthStore = create((set, get) => ({
   gameStats:      EMPTY_GAME_STATS(),
 
   // ── Connexion ─────────────────────────────────────────────────────────────
-  setAuth: async (user, accessToken) => {
-    // Persister le token et l'identité
+  setAuth: async (user, accessToken, trainerStatus = null) => {
     await Promise.all([
       AsyncStorage.setItem('accessToken', accessToken),
       AsyncStorage.setItem('user', JSON.stringify(user)),
+      AsyncStorage.setItem('trainerStatus', trainerStatus ?? ''),
     ]);
-
-    // Charger les données propres à CET utilisateur
     const userData = await loadUserData(user.email);
-
-    set({ user, accessToken, ...userData });
+    set({ user, accessToken, trainerStatus, ...userData });
   },
 
   // ── Déconnexion ───────────────────────────────────────────────────────────
   logout: async () => {
-    // Effacer seulement les tokens — les données utilisateur restent pour la prochaine connexion
     await Promise.all([
       AsyncStorage.removeItem('accessToken'),
       AsyncStorage.removeItem('user'),
+      AsyncStorage.removeItem('trainerStatus'),
     ]);
 
     // Remettre le store à zéro (les données seront rechargées au prochain login)
     set({
       user:           null,
       accessToken:    null,
+      trainerStatus:  null,
       language:       null,
       level:          null,
       sublevel:       null,
@@ -155,9 +154,9 @@ export const useAuthStore = create((set, get) => ({
 
       if (token && userStr) {
         const user = JSON.parse(userStr);
-        // Charger les données propres à cet utilisateur
+        const trainerStatus = await AsyncStorage.getItem('trainerStatus');
         const userData = await loadUserData(user.email);
-        set({ user, accessToken: token, ...userData, isLoading: false });
+        set({ user, accessToken: token, trainerStatus: trainerStatus || null, ...userData, isLoading: false });
       } else {
         set({ isLoading: false });
       }

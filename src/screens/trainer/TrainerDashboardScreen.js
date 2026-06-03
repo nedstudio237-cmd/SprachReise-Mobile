@@ -1,185 +1,180 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, FONTS } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
-import api from '../../services/api';
-
-const LEVEL_COLORS = { A1:'#10B981', A2:'#3B82F6', B1:'#8B5CF6', B2:'#F59E0B', C1:'#EC4899', C2:'#EF4444' };
-
-function StatCard({ icon, value, label, color = COLORS.gold }) {
-  return (
-    <View style={styles.statCard}>
-      <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
+import { useMessageStore } from '../../store/messageStore';
+import { COLORS, FONTS, API_BASE_URL } from '../../constants/config';
 
 export default function TrainerDashboardScreen({ navigation }) {
-  const { user } = useAuthStore();
-  const [profile, setProfile] = useState(null);
-  const [courses, setCourses] = useState([]);
-  const [sessions, setSessions] = useState([]);
+  const { user, accessToken, logout } = useAuthStore();
+  const totalUnread = useMessageStore(s => s.totalUnread());
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.get('/trainers/me'),
-      api.get('/courses/mine'),
-      api.get('/sessions/mine'),
-    ]).then(([pRes, cRes, sRes]) => {
-      setProfile(pRes.data);
-      setCourses(cRes.data ?? []);
-      setSessions(sRes.data ?? []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    fetch(`${API_BASE_URL}/trainer/stats`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(r => r.json())
+      .then(setStats)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  const levelCode = profile?.assignedLevelCode ?? '—';
-  const levelColor = LEVEL_COLORS[levelCode] ?? COLORS.accent;
-  const upcomingSessions = sessions.filter(s => s.status === 'SCHEDULED' || s.status === 'LIVE');
-
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerSub}>TABLEAU DE BORD</Text>
-          <Text style={styles.headerTitle}>Bonjour, {user?.firstName} 👋</Text>
+    <SafeAreaView style={s.container}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* Header */}
+        <View style={s.header}>
+          <View>
+            <Text style={s.overline}>ESPACE FORMATEUR</Text>
+            <Text style={s.title}>Bonjour, {user?.firstName} 👋</Text>
+          </View>
+          <TouchableOpacity onPress={logout} style={s.logoutBtn}>
+            <Text style={s.logoutText}>⎋</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => navigation?.navigate('Messages')}>
-          <Text style={{ fontSize: 26 }}>💬</Text>
-        </TouchableOpacity>
-      </View>
 
-      {loading ? (
-        <ActivityIndicator color={COLORS.gold} style={{ marginTop: 60 }} size="large" />
-      ) : (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-          {/* Badge niveau */}
-          <LinearGradient colors={[levelColor + '25', levelColor + '08']} style={styles.levelCard}>
-            <View>
-              <Text style={styles.levelLabel}>NIVEAU ENSEIGNÉ</Text>
-              <Text style={[styles.levelCode, { color: levelColor }]}>{levelCode}</Text>
-            </View>
-            <View style={styles.quotaWrap}>
-              <Text style={[styles.quotaNum, { color: levelColor }]}>
-                {profile?.currentStudents ?? 0}
-              </Text>
-              <Text style={styles.quotaOf}>/ {profile?.maxStudents ?? 30}</Text>
-              <Text style={styles.quotaLabel}>apprenants</Text>
-            </View>
-          </LinearGradient>
-
-          {/* Stats */}
-          <View style={styles.statsRow}>
-            <StatCard icon="📚" value={courses.length} label="Cours publiés" />
-            <StatCard icon="📡" value={upcomingSessions.length} label="Sessions à venir" color={COLORS.accent} />
-            <StatCard icon="⭐" value={profile?.ratingAvg ?? '—'} label="Note moy." color='#FFD700' />
+        {/* Badge niveau */}
+        {stats && (
+          <View style={s.levelBadge}>
+            <Text style={s.levelText}>Niveau {stats.teachingLevel} · Formateur approuvé</Text>
           </View>
+        )}
 
-          {/* Accès rapides */}
-          <Text style={styles.sectionTitle}>ACTIONS RAPIDES</Text>
-          <View style={styles.actionsGrid}>
-            {[
-              { icon: '📹', label: 'Nouveau cours',    screen: 'CreateCourse' },
-              { icon: '📡', label: 'Nouvelle session', screen: 'CreateSession' },
-              { icon: '✏️', label: 'Nouveau QCM',      screen: 'CreateQcm' },
-              { icon: '📝', label: 'Épreuves',         screen: 'TrainerExams' },
-            ].map((a) => (
-              <TouchableOpacity
-                key={a.label}
-                style={styles.actionCard}
-                onPress={() => navigation?.navigate(a.screen)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.actionIcon}>{a.icon}</Text>
-                <Text style={styles.actionLabel}>{a.label}</Text>
-              </TouchableOpacity>
-            ))}
+        {/* Stats */}
+        {loading ? (
+          <ActivityIndicator color={COLORS.gold} style={{ marginTop: 40 }} />
+        ) : stats ? (
+          <View style={s.statsRow}>
+            <StatCard value={stats.publishedCourses} label="Cours publiés" />
+            <StatCard value={stats.totalLearners}    label="Apprenants" />
+            <StatCard value={stats.upcomingSessions} label="Sessions" />
           </View>
+        ) : null}
 
-          {/* Sessions à venir */}
-          {upcomingSessions.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>SESSIONS À VENIR</Text>
-              {upcomingSessions.slice(0, 3).map((s) => (
-                <View key={s.id} style={styles.sessionRow}>
-                  <View style={[styles.sessionDot, s.status === 'LIVE' && { backgroundColor: '#E63946' }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.sessionTitle}>{s.title}</Text>
-                    <Text style={styles.sessionDate}>
-                      {s.scheduledStart ? new Date(s.scheduledStart).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
-                    </Text>
-                  </View>
-                  {s.status === 'LIVE' && <Text style={styles.liveBadge}>● LIVE</Text>}
-                </View>
-              ))}
-            </>
-          )}
+        <View style={s.divider} />
 
-          <View style={{ height: 20 }} />
-        </ScrollView>
-      )}
+        {/* Actions */}
+        <Text style={s.sectionTitle}>ACTIONS RAPIDES</Text>
+
+        <ActionCard
+          icon="📚"
+          title="Mes cours"
+          subtitle="Gérer et publier vos cours"
+          onPress={() => navigation.navigate('TrainerCourses')}
+        />
+        <ActionCard
+          icon="➕"
+          title="Créer un cours"
+          subtitle="Nouveau cours vidéo + PDF"
+          onPress={() => navigation.navigate('TrainerCreateCourse')}
+        />
+        <ActionCard
+          icon="📅"
+          title="Sessions live"
+          subtitle="Programmer une session en direct"
+          onPress={() => navigation.navigate('TrainerSessions')}
+        />
+        <ActionCard
+          icon="📝"
+          title="Évaluations"
+          subtitle="Créer et corriger des épreuves"
+          onPress={() => navigation.navigate('TrainerExams')}
+        />
+        <ActionCard
+          icon="🧩"
+          title="Mes QCMs"
+          subtitle="Créer et publier des questionnaires"
+          onPress={() => navigation.navigate('TrainerQcms')}
+        />
+        <ActionCard
+          icon="👥"
+          title="Mes apprenants"
+          subtitle="Suivi de progression"
+          onPress={() => navigation.navigate('TrainerLearners')}
+        />
+        <ActionCard
+          icon="💬"
+          title="Messages"
+          subtitle="Conversations apprenants"
+          onPress={() => navigation.navigate('TrainerMessages')}
+          badge={totalUnread > 0 ? totalUnread : null}
+        />
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.deep },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(126,102,58,0.2)',
-  },
-  headerSub: { fontFamily: FONTS.uiBold, color: COLORS.muted, fontSize: 10, letterSpacing: 2 },
-  headerTitle: { fontFamily: FONTS.display, color: COLORS.parchment, fontSize: 20 },
-  scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
+const StatCard = ({ value, label }) => (
+  <View style={s.statCard}>
+    <Text style={s.statValue}>{value ?? 0}</Text>
+    <Text style={s.statLabel}>{label}</Text>
+  </View>
+);
 
-  levelCard: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderRadius: 14, padding: 20, marginBottom: 20,
-    borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
-  },
-  levelLabel: { fontFamily: FONTS.uiBold, color: COLORS.muted, fontSize: 10, letterSpacing: 2, marginBottom: 4 },
-  levelCode: { fontFamily: FONTS.displayBold, fontSize: 44, lineHeight: 48 },
-  quotaWrap: { alignItems: 'center' },
-  quotaNum: { fontFamily: FONTS.displayBold, fontSize: 36 },
-  quotaOf: { fontFamily: FONTS.uiBold, color: COLORS.muted, fontSize: 14 },
-  quotaLabel: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11 },
+const ActionCard = ({ icon, title, subtitle, onPress, disabled, badge }) => (
+  <TouchableOpacity
+    style={[s.actionCard, disabled && { opacity: 0.45 }]}
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={0.8}
+  >
+    <Text style={s.actionIcon}>{icon}</Text>
+    <View style={s.actionText}>
+      <Text style={s.actionTitle}>{title}</Text>
+      <Text style={s.actionSub}>{subtitle}</Text>
+    </View>
+    {badge ? (
+      <View style={s.badge}>
+        <Text style={s.badgeTxt}>{badge > 99 ? '99+' : badge}</Text>
+      </View>
+    ) : (
+      <Text style={s.actionArrow}>›</Text>
+    )}
+  </TouchableOpacity>
+);
 
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.paper },
+  scroll:    { padding: 24, paddingBottom: 40 },
+
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  overline: { fontFamily: FONTS.uiBold, color: COLORS.accent, fontSize: 10, letterSpacing: 3 },
+  title:    { fontFamily: FONTS.display, color: COLORS.deep, fontSize: 26, marginTop: 4 },
+  logoutBtn: { padding: 8 },
+  logoutText: { fontSize: 20, color: COLORS.muted },
+
+  levelBadge: {
+    backgroundColor: COLORS.deep, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8,
+    alignSelf: 'flex-start', marginBottom: 24,
+  },
+  levelText: { fontFamily: FONTS.uiBold, color: COLORS.gold, fontSize: 12, letterSpacing: 1 },
+
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 28 },
   statCard: {
-    flex: 1, backgroundColor: 'rgba(245,239,227,0.06)', borderRadius: 10,
-    padding: 14, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
+    flex: 1, backgroundColor: 'white', borderRadius: 8,
+    padding: 16, alignItems: 'center',
+    borderWidth: 1, borderColor: COLORS.paperDeep,
   },
-  statIcon: { fontSize: 22, marginBottom: 6 },
-  statValue: { fontFamily: FONTS.displayBold, fontSize: 24, marginBottom: 2 },
-  statLabel: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 10, textAlign: 'center' },
+  statValue: { fontFamily: FONTS.displayBold, color: COLORS.accent, fontSize: 28 },
+  statLabel: { fontFamily: FONTS.uiMedium, color: COLORS.muted, fontSize: 11, letterSpacing: 1, marginTop: 4 },
 
-  sectionTitle: {
-    fontFamily: FONTS.uiBold, color: COLORS.gold,
-    fontSize: 10, letterSpacing: 2.5, marginBottom: 12,
-  },
-  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
+  divider: { height: 1, backgroundColor: COLORS.paperDeep, marginBottom: 20 },
+  sectionTitle: { fontFamily: FONTS.uiBold, color: COLORS.muted, fontSize: 10, letterSpacing: 3, marginBottom: 14 },
+
   actionCard: {
-    width: '47%', backgroundColor: 'rgba(245,239,227,0.06)', borderRadius: 10,
-    padding: 16, alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
+    backgroundColor: 'white', borderRadius: 8, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: COLORS.paperDeep,
   },
-  actionIcon: { fontSize: 28 },
-  actionLabel: { fontFamily: FONTS.uiMedium, color: COLORS.cream, fontSize: 12, textAlign: 'center' },
-
-  sessionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(245,239,227,0.05)', borderRadius: 10,
-    padding: 12, marginBottom: 8,
-    borderWidth: 1, borderColor: 'rgba(126,102,58,0.15)',
-  },
-  sessionDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.accent },
-  sessionTitle: { fontFamily: FONTS.uiMedium, color: COLORS.cream, fontSize: 13 },
-  sessionDate: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11, marginTop: 2 },
-  liveBadge: { fontFamily: FONTS.uiBold, color: '#E63946', fontSize: 11 },
+  actionIcon:  { fontSize: 22 },
+  actionText:  { flex: 1 },
+  actionTitle: { fontFamily: FONTS.uiBold, color: COLORS.deep, fontSize: 15 },
+  actionSub:   { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 12, marginTop: 2 },
+  actionArrow: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 22 },
+  badge:    { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  badgeTxt: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 11 },
 });

@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/config';
 import { useChatStore } from '../../store/chatStore';
+import { useAuthStore } from '../../store/authStore';
 
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -25,10 +26,11 @@ function levelColor(level) {
 }
 
 export default function ChatHistoryScreen({ navigation }) {
+  const { user } = useAuthStore();
   const { conversations, loaded, load, deleteConversation, clearAll } = useChatStore();
   const [deleting, setDeleting] = useState(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(user?.id); }, [user?.id]);
 
   const handleOpen = (conv) => {
     navigation.navigate('AiTutor', {
@@ -42,7 +44,7 @@ export default function ChatHistoryScreen({ navigation }) {
       'Supprimer cette conversation ?',
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: () => { setDeleting(id); deleteConversation(id).then(() => setDeleting(null)); } },
+        { text: 'Supprimer', style: 'destructive', onPress: () => { setDeleting(id); deleteConversation(id, user?.id).then(() => setDeleting(null)); } },
       ]
     );
   };
@@ -53,7 +55,7 @@ export default function ChatHistoryScreen({ navigation }) {
       'Supprimer tout l\'historique des conversations ?',
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Effacer tout', style: 'destructive', onPress: clearAll },
+        { text: 'Effacer tout', style: 'destructive', onPress: () => clearAll(user?.id) },
       ]
     );
   };

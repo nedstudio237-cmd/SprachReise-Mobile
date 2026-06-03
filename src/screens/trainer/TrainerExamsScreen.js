@@ -1,101 +1,192 @@
-import { useCallback, useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  TextInput, Modal, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
-import { COLORS, FONTS } from '../../constants/config';
-import api from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
+import { COLORS, FONTS, API_BASE_URL } from '../../constants/config';
+
+const STATUS_FR = { DRAFT: 'Brouillon', PUBLISHED: 'Publié' };
 
 export default function TrainerExamsScreen({ navigation }) {
+  const { accessToken } = useAuthStore();
   const [exams, setExams]         = useState([]);
   const [loading, setLoading]     = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newTitle, setNewTitle]   = useState('');
-  const [newInstr, setNewInstr]   = useState('');
-  const [creating, setCreating]   = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [selectedExam, setSelectedExam] = useState(null);
+  const [submissions, setSubmissions]   = useState([]);
+  const [showSubs, setShowSubs]   = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api.get('/exams/mine')
-      .then(r => setExams(r.data ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const [form, setForm] = useState({ title: '', instructions: '', scheduledAt: '' });
 
-  useFocusEffect(load);
-
-  const createExam = async () => {
-    if (!newTitle.trim()) { Alert.alert('Erreur', 'Titre obligatoire'); return; }
-    setCreating(true);
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
     try {
-      await api.post('/exams', { title: newTitle.trim(), instructions: newInstr.trim(), status: 'PUBLISHED' });
-      setShowCreate(false); setNewTitle(''); setNewInstr('');
-      load();
-    } catch (e) {
-      Alert.alert('Erreur', e.response?.data?.error ?? 'Erreur');
-    } finally { setCreating(false); }
+      const r = await fetch(`${API_BASE_URL}/trainer/exams`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await r.json();
+      setExams(Array.isArray(data) ? data : []);
+    } catch { }
+    setLoading(false);
+    setRefreshing(false);
+  }, [accessToken]);
+
+  useState(() => { load(); }, []);
+
+  const handleCreate = async () => {
+    if (!form.title.trim()) { Alert.alert('Erreur', 'Le titre est requis'); return; }
+    setSaving(true);
+    try {
+      const body = { title: form.title.trim(), instructions: form.instructions.trim() || null };
+      if (form.scheduledAt.trim()) body.scheduledAt = form.scheduledAt.trim();
+      const r = await fetch(`${API_BASE_URL}/trainer/exams`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) {
+        setShowModal(false);
+        setForm({ title: '', instructions: '', scheduledAt: '' });
+        load();
+      } else {
+        const err = await r.json();
+        Alert.alert('Erreur', err.error || 'Erreur lors de la création');
+      }
+    } catch { Alert.alert('Erreur', 'Connexion impossible'); }
+    setSaving(false);
   };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.cardTop}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
-        <View style={[styles.statusBadge, { borderColor: item.status === 'PUBLISHED' ? '#10B981' : COLORS.muted }]}>
-          <Text style={[styles.statusText, { color: item.status === 'PUBLISHED' ? '#10B981' : COLORS.muted }]}>
-            {item.status === 'PUBLISHED' ? 'Publié' : 'Brouillon'}
-          </Text>
-        </View>
-      </View>
-      {item.instructions ? <Text style={styles.cardInstr} numberOfLines={2}>{item.instructions}</Text> : null}
-      {item.scheduledAt && <Text style={styles.cardDate}>📅 {new Date(item.scheduledAt).toLocaleDateString('fr-FR')}</Text>}
-    </View>
-  );
+  const togglePublish = async (id) => {
+    await fetch(`${API_BASE_URL}/trainer/exams/${id}/publish`, {
+      method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    load();
+  };
+
+  const loadSubmissions = async (exam) => {
+    setSelectedExam(exam);
+    setSubmissions([]);
+    setShowSubs(true);
+    try {
+      const r = await fetch(`${API_BASE_URL}/trainer/exams/${exam.id}/submissions`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await r.json();
+      setSubmissions(Array.isArray(data) ? data : []);
+    } catch { }
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation?.goBack()}><Text style={styles.backText}>‹</Text></TouchableOpacity>
-        <Text style={styles.headerTitle}>Mes épreuves</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowCreate(true)}>
-          <Text style={styles.addBtnText}>+ Créer</Text>
+    <SafeAreaView style={s.container}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.back}>
+          <Text style={s.backText}>← Retour</Text>
+        </TouchableOpacity>
+        <Text style={s.title}>Évaluations</Text>
+        <TouchableOpacity onPress={() => setShowModal(true)} style={s.addBtn}>
+          <Text style={s.addText}>＋</Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <ActivityIndicator color={COLORS.gold} style={{ marginTop: 60 }} />
-      ) : exams.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={{ fontSize: 48 }}>📝</Text>
-          <Text style={styles.emptyText}>Aucune épreuve créée</Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCreate(true)}>
-            <Text style={styles.emptyBtnText}>Créer une épreuve</Text>
-          </TouchableOpacity>
-        </View>
+        <ActivityIndicator color={COLORS.gold} style={{ marginTop: 40 }} />
       ) : (
-        <FlatList data={exams} keyExtractor={i => String(i.id)} renderItem={renderItem} contentContainerStyle={styles.list} />
+        <ScrollView
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.gold} />}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        >
+          {exams.length === 0 && (
+            <Text style={s.empty}>Aucune évaluation.{'\n'}Appuie sur ＋ pour en créer une.</Text>
+          )}
+          {exams.map(exam => (
+            <View key={exam.id} style={s.card}>
+              <View style={s.cardHeader}>
+                <View style={[s.statusBadge, { backgroundColor: exam.status === 'PUBLISHED' ? '#10B981' : '#6B7280' }]}>
+                  <Text style={s.statusText}>{STATUS_FR[exam.status] || exam.status}</Text>
+                </View>
+                <Text style={s.subCount}>{exam.submissions} réponse{exam.submissions !== 1 ? 's' : ''}</Text>
+              </View>
+              <Text style={s.cardTitle}>{exam.title}</Text>
+              {exam.instructions && <Text style={s.cardDesc} numberOfLines={2}>{exam.instructions}</Text>}
+              {exam.scheduledAt && (
+                <Text style={s.metaText}>📅 {exam.scheduledAt.replace('T', ' ').substring(0, 16)}</Text>
+              )}
+              <View style={s.actions}>
+                <TouchableOpacity onPress={() => togglePublish(exam.id)} style={[s.actionBtn, { borderColor: exam.status === 'PUBLISHED' ? '#EF4444' : '#10B981' }]}>
+                  <Text style={[s.actionText, { color: exam.status === 'PUBLISHED' ? '#EF4444' : '#10B981' }]}>
+                    {exam.status === 'PUBLISHED' ? 'Dépublier' : 'Publier'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => loadSubmissions(exam)} style={[s.actionBtn, { borderColor: COLORS.gold }]}>
+                  <Text style={[s.actionText, { color: COLORS.gold }]}>Voir réponses</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       )}
 
-      {/* Modal création */}
-      <Modal visible={showCreate} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Nouvelle épreuve</Text>
-            <TextInput style={styles.modalInput} value={newTitle} onChangeText={setNewTitle} placeholder="Titre *" placeholderTextColor={COLORS.muted} />
+      {/* Modal créer évaluation */}
+      <Modal visible={showModal} animationType="slide" transparent>
+        <View style={s.overlay}>
+          <View style={s.modal}>
+            <Text style={s.modalTitle}>Nouvelle évaluation</Text>
+            <Text style={s.label}>Titre *</Text>
             <TextInput
-              style={[styles.modalInput, { height: 100, textAlignVertical: 'top' }]}
-              value={newInstr} onChangeText={setNewInstr}
-              placeholder="Consignes..." placeholderTextColor={COLORS.muted} multiline
+              style={s.input} placeholder="Ex: Épreuve finale B1"
+              value={form.title} onChangeText={v => setForm(f => ({ ...f, title: v }))}
             />
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreate(false)}>
-                <Text style={styles.cancelBtnText}>Annuler</Text>
+            <Text style={s.label}>Instructions (optionnel)</Text>
+            <TextInput
+              style={[s.input, { height: 80 }]} multiline placeholder="Consignes pour les apprenants..."
+              value={form.instructions} onChangeText={v => setForm(f => ({ ...f, instructions: v }))}
+            />
+            <Text style={s.label}>Date de programmation (optionnel, format: 2026-06-20T10:00:00)</Text>
+            <TextInput
+              style={s.input} placeholder="2026-06-20T10:00:00"
+              value={form.scheduledAt} onChangeText={v => setForm(f => ({ ...f, scheduledAt: v }))}
+            />
+            <View style={s.modalBtns}>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={s.cancelModalBtn}>
+                <Text style={s.cancelModalText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmBtn, creating && { opacity: 0.6 }]} onPress={createExam} disabled={creating}>
-                {creating ? <ActivityIndicator color={COLORS.parchment} size="small" /> : <Text style={styles.confirmBtnText}>Créer</Text>}
+              <TouchableOpacity onPress={handleCreate} style={s.submitBtn} disabled={saving}>
+                {saving ? <ActivityIndicator color="#000" size="small" /> : <Text style={s.submitText}>Créer</Text>}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal voir réponses */}
+      <Modal visible={showSubs} animationType="slide" transparent>
+        <View style={s.overlay}>
+          <View style={[s.modal, { maxHeight: '80%' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+              <Text style={s.modalTitle}>{selectedExam?.title}</Text>
+              <TouchableOpacity onPress={() => setShowSubs(false)}>
+                <Text style={{ color: '#9CA3AF', fontSize: 20 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {submissions.length === 0 ? (
+                <Text style={s.empty}>Aucune réponse pour cette évaluation.</Text>
+              ) : (
+                submissions.map(sub => (
+                  <View key={sub.id} style={[s.card, { marginBottom: 10 }]}>
+                    <Text style={s.cardTitle}>{sub.learnerName || `Apprenant #${sub.learnerId}`}</Text>
+                    <Text style={s.metaText}>{sub.learnerEmail}</Text>
+                    <Text style={s.metaText}>Soumis : {sub.submittedAt ? sub.submittedAt.substring(0, 16) : '—'}</Text>
+                    {sub.grade != null && <Text style={{ color: COLORS.gold, fontFamily: FONTS.bold, marginTop: 4 }}>Note : {sub.grade}/20</Text>}
+                    {sub.feedback && <Text style={s.cardDesc}>Feedback : {sub.feedback}</Text>}
+                  </View>
+                ))
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -103,43 +194,34 @@ export default function TrainerExamsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.deep },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(126,102,58,0.2)',
-  },
-  backText: { color: COLORS.gold, fontSize: 26 },
-  headerTitle: { fontFamily: FONTS.display, color: COLORS.parchment, fontSize: 20 },
-  addBtn: { backgroundColor: COLORS.accent, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
-  addBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 12 },
-  list: { padding: 16, gap: 10 },
-  card: {
-    backgroundColor: 'rgba(245,239,227,0.06)', borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: 'rgba(126,102,58,0.2)',
-  },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
-  cardTitle: { fontFamily: FONTS.uiMedium, color: COLORS.cream, fontSize: 14, flex: 1, marginRight: 8 },
-  statusBadge: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontFamily: FONTS.uiBold, fontSize: 10 },
-  cardInstr: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 12, fontStyle: 'italic', marginBottom: 4 },
-  cardDate: { fontFamily: FONTS.ui, color: COLORS.muted, fontSize: 11 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  emptyText: { fontFamily: FONTS.regular, color: COLORS.muted, fontSize: 15, fontStyle: 'italic' },
-  emptyBtn: { backgroundColor: COLORS.accent, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 12 },
-  emptyBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: COLORS.deep, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, borderTopWidth: 1, borderColor: 'rgba(126,102,58,0.3)' },
-  modalTitle: { fontFamily: FONTS.display, color: COLORS.parchment, fontSize: 20, marginBottom: 20 },
-  modalInput: {
-    backgroundColor: 'rgba(245,239,227,0.07)', borderWidth: 1, borderColor: 'rgba(126,102,58,0.4)',
-    borderRadius: 8, padding: 14, color: COLORS.parchment, fontSize: 15,
-    fontFamily: FONTS.regular, marginBottom: 14,
-  },
-  modalBtns: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  cancelBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.muted, borderRadius: 8, padding: 14, alignItems: 'center' },
-  cancelBtnText: { fontFamily: FONTS.uiBold, color: COLORS.muted, fontSize: 13 },
-  confirmBtn: { flex: 1, backgroundColor: COLORS.accent, borderRadius: 8, padding: 14, alignItems: 'center' },
-  confirmBtnText: { fontFamily: FONTS.uiBold, color: COLORS.parchment, fontSize: 13 },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.dark || '#0F1117' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#1E2030' },
+  back: { marginRight: 12 },
+  backText: { color: COLORS.gold, fontSize: 14, fontFamily: FONTS.regular },
+  title: { flex: 1, color: '#fff', fontSize: 18, fontFamily: FONTS.bold },
+  addBtn: { backgroundColor: COLORS.gold, borderRadius: 20, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  addText: { color: '#000', fontSize: 22, fontWeight: 'bold' },
+  empty: { color: '#9CA3AF', textAlign: 'center', marginTop: 40, lineHeight: 24, fontFamily: FONTS.regular },
+  card: { backgroundColor: '#1E2030', borderRadius: 12, padding: 14, marginBottom: 14 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  statusBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  statusText: { color: '#fff', fontSize: 11, fontFamily: FONTS.bold },
+  subCount: { color: '#9CA3AF', fontSize: 12, fontFamily: FONTS.regular },
+  cardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.bold, marginBottom: 4 },
+  cardDesc: { color: '#9CA3AF', fontSize: 13, fontFamily: FONTS.regular, marginBottom: 6 },
+  metaText: { color: '#9CA3AF', fontSize: 12, fontFamily: FONTS.regular, marginTop: 2 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  actionBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
+  actionText: { fontSize: 13, fontFamily: FONTS.regular },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modal: { backgroundColor: '#1E2030', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+  modalTitle: { color: '#fff', fontSize: 18, fontFamily: FONTS.bold, marginBottom: 4 },
+  label: { color: '#9CA3AF', fontSize: 12, fontFamily: FONTS.regular, marginBottom: 4, marginTop: 12 },
+  input: { backgroundColor: '#2A2D3E', borderRadius: 8, color: '#fff', paddingHorizontal: 12, paddingVertical: 10, fontFamily: FONTS.regular, fontSize: 14 },
+  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  cancelModalBtn: { flex: 1, borderWidth: 1, borderColor: '#4B5563', borderRadius: 10, padding: 14, alignItems: 'center' },
+  cancelModalText: { color: '#9CA3AF', fontFamily: FONTS.regular },
+  submitBtn: { flex: 1, backgroundColor: COLORS.gold, borderRadius: 10, padding: 14, alignItems: 'center' },
+  submitText: { color: '#000', fontFamily: FONTS.bold, fontSize: 15 },
 });

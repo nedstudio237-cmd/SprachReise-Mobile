@@ -12,11 +12,16 @@ import WordOrderScreen from '../screens/cursus/WordOrderScreen';
 import AiTutorScreen from '../screens/ai/AiTutorScreen';
 import ChatHistoryScreen from '../screens/ai/ChatHistoryScreen';
 import ProgressScreen from '../screens/home/ProgressScreen';
-import CreateCourseScreen from '../screens/trainer/CreateCourseScreen';
-import CreateSessionScreen from '../screens/trainer/CreateSessionScreen';
-import CreateQcmScreen from '../screens/trainer/CreateQcmScreen';
-import TrainerExamsScreen from '../screens/trainer/TrainerExamsScreen';
 import ConversationScreen from '../screens/messages/ConversationScreen';
+import LiveSessionScreen from '../screens/live/LiveSessionScreen';
+import LiveStatsScreen from '../screens/live/LiveStatsScreen';
+import LiveDetailScreen from '../screens/live/LiveDetailScreen';
+import TrainerPublicProfileScreen from '../screens/learner/TrainerPublicProfileScreen';
+import NotificationsScreen from '../screens/home/NotificationsScreen';
+import PaymentScreen       from '../screens/auth/PaymentScreen';
+import SubscriptionScreen  from '../screens/profile/SubscriptionScreen';
+import HelpScreen          from '../screens/profile/HelpScreen';
+import AboutScreen         from '../screens/profile/AboutScreen';
 
 const Stack = createStackNavigator();
 
@@ -35,12 +40,17 @@ export default function MainStack() {
       <Stack.Screen name="WordOrder"    component={WordOrderScreen} />
       <Stack.Screen name="AiTutor"      component={AiTutorScreen} />
       <Stack.Screen name="ChatHistory"  component={ChatHistoryScreen} />
-      <Stack.Screen name="Progress"       component={ProgressScreen} />
-      <Stack.Screen name="CreateCourse"   component={CreateCourseScreen} />
-      <Stack.Screen name="CreateSession"  component={CreateSessionScreen} />
-      <Stack.Screen name="CreateQcm"      component={CreateQcmScreen} />
-      <Stack.Screen name="TrainerExams"   component={TrainerExamsScreen} />
-      <Stack.Screen name="Conversation"   component={ConversationScreen} />
+      <Stack.Screen name="Progress"     component={ProgressScreen} />
+      <Stack.Screen name="Conversation" component={ConversationScreen} />
+      <Stack.Screen name="LiveSession"  component={LiveSessionScreen} />
+      <Stack.Screen name="LiveStats"           component={LiveStatsScreen} />
+      <Stack.Screen name="LiveDetail"          component={LiveDetailScreen} />
+      <Stack.Screen name="TrainerPublicProfile" component={TrainerPublicProfileScreen} />
+      <Stack.Screen name="Notifications"   component={NotificationsScreen} />
+      <Stack.Screen name="Payment"        component={PaymentScreen} />
+      <Stack.Screen name="Subscription"   component={SubscriptionScreen} />
+      <Stack.Screen name="Help"           component={HelpScreen} />
+      <Stack.Screen name="About"          component={AboutScreen} />
     </Stack.Navigator>
   );
 }

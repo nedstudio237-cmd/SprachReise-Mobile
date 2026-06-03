@@ -141,6 +141,21 @@ export default function ProfileScreen({ navigation }) {
           </>
         )}
 
+        {/* ── Formateur & Messagerie ── */}
+        <Text style={styles.sectionLabel}>MON FORMATEUR</Text>
+        <View style={styles.menu}>
+          {user?.assignedTrainerId ? (
+            <MenuItem label="Voir le profil de mon formateur" icon="👨‍🏫"
+              onPress={() => navigation?.navigate('TrainerPublicProfile', { trainerId: user.assignedTrainerId })} />
+          ) : (
+            <MenuItem label="Aucun formateur assigné encore" icon="👨‍🏫" />
+          )}
+          {user?.assignedTrainerId ? (
+            <MenuItem label="Contacter mon formateur" icon="💬"
+              onPress={() => navigation?.navigate('Conversation', { otherUserId: user.assignedTrainerId, otherName: 'Mon formateur' })} />
+          ) : null}
+        </View>
+
         {/* ── Tuteur IA ── */}
         <Text style={styles.sectionLabel}>TUTEUR IA</Text>
         <View style={styles.menu}>
@@ -153,7 +168,8 @@ export default function ProfileScreen({ navigation }) {
         {/* ── Mon compte ── */}
         <Text style={styles.sectionLabel}>MON COMPTE</Text>
         <View style={styles.menu}>
-          <MenuItem label="Mon abonnement" icon="💎" badge="STANDARD" />
+          <MenuItem label="Mon abonnement" icon="💎"
+            onPress={() => navigation?.navigate('Subscription')} />
           <MenuItem label="Mes certificats" icon="📜" />
           <MenuItem label="Paramètres de langue" icon="🌐"
             badge={`${LANG_FLAGS[language ?? 'de']} ${(language ?? 'de').toUpperCase()}`} />
@@ -161,9 +177,10 @@ export default function ProfileScreen({ navigation }) {
 
         <Text style={styles.sectionLabel}>AIDE</Text>
         <View style={styles.menu}>
-          <MenuItem label="Notifications" icon="🔔" />
-          <MenuItem label="Aide & Support"  icon="💬" />
-          <MenuItem label="À propos"        icon="ℹ️" />
+          <MenuItem label="Aide & Support"  icon="💬"
+            onPress={() => navigation?.navigate('Help')} />
+          <MenuItem label="À propos"        icon="ℹ️"
+            onPress={() => navigation?.navigate('About')} />
         </View>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={logout}>

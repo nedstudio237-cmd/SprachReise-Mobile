@@ -6,19 +6,21 @@ import PricingScreen from '../screens/auth/PricingScreen';
 import LanguageSelectScreen from '../screens/auth/LanguageSelectScreen';
 import LevelSelectScreen from '../screens/auth/LevelSelectScreen';
 import SubLevelScreen from '../screens/auth/SubLevelScreen';
+import TrainerRegisterScreen from '../screens/trainer/TrainerRegisterScreen';
 
 const Stack = createStackNavigator();
 
 export default function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-      <Stack.Screen name="Pricing" component={PricingScreen} />
+      <Stack.Screen name="Onboarding"     component={OnboardingScreen} />
+      <Stack.Screen name="Login"          component={LoginScreen} />
+      <Stack.Screen name="Register"       component={RegisterScreen} />
+      <Stack.Screen name="Pricing"        component={PricingScreen} />
       <Stack.Screen name="LanguageSelect" component={LanguageSelectScreen} />
-      <Stack.Screen name="LevelSelect" component={LevelSelectScreen} />
-      <Stack.Screen name="SubLevel" component={SubLevelScreen} />
+      <Stack.Screen name="LevelSelect"    component={LevelSelectScreen} />
+      <Stack.Screen name="SubLevel"         component={SubLevelScreen} />
+      <Stack.Screen name="TrainerRegister"  component={TrainerRegisterScreen} />
     </Stack.Navigator>
   );
 }

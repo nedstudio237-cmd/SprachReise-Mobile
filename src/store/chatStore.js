@@ -1,18 +1,21 @@
 /**
- * Store des conversations IA — persiste dans AsyncStorage.
+ * Store des conversations IA — persiste dans AsyncStorage par utilisateur.
  * Chaque conversation : { id, title, level, context, messages[], createdAt, updatedAt }
  */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = 'ai_chat_history';
 const MAX_CONVERSATIONS = 50;
+
+// Clé propre à chaque utilisateur pour isoler les historiques
+function storageKey(userId) {
+  return userId ? `ai_chat_history_${userId}` : 'ai_chat_history_guest';
+}
 
 function makeId() {
   return 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 }
 
-// Titre auto : premiers 60 caractères du premier message utilisateur
 function autoTitle(messages) {
   const first = messages.find((m) => m.role === 'user');
   if (!first) return 'Conversation';
@@ -20,27 +23,33 @@ function autoTitle(messages) {
 }
 
 export const useChatStore = create((set, get) => ({
-  conversations: [],   // liste triée par updatedAt desc
-  loaded: false,
+  conversations: [],
+  loaded:        false,
+  currentUserId: null,   // userId chargé en mémoire
 
-  // ── Charger depuis AsyncStorage ────────────────────────────────────────
-  load: async () => {
-    if (get().loaded) return;
+  // ── Charger l'historique d'un utilisateur précis ────────────────────────
+  load: async (userId) => {
+    const key = storageKey(userId);
+    // Si déjà chargé pour ce même user, ne pas recharger
+    if (get().loaded && get().currentUserId === userId) return;
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(key);
       const conversations = raw ? JSON.parse(raw) : [];
-      set({ conversations, loaded: true });
+      set({ conversations, loaded: true, currentUserId: userId });
     } catch {
-      set({ conversations: [], loaded: true });
+      set({ conversations: [], loaded: true, currentUserId: userId });
     }
   },
 
-  // ── Sauvegarder une conversation (create ou update) ────────────────────
-  saveConversation: async (conv) => {
+  // ── Réinitialiser quand on change d'utilisateur ─────────────────────────
+  reset: () => set({ conversations: [], loaded: false, currentUserId: null }),
+
+  // ── Sauvegarder une conversation (create ou update) ─────────────────────
+  saveConversation: async (conv, userId) => {
+    const key = storageKey(userId ?? get().currentUserId);
     const { conversations } = get();
     const now = new Date().toISOString();
 
-    // Ne pas sauvegarder si moins de 2 messages (uniquement le message de bienvenue)
     const realMessages = conv.messages.filter((m) => m.id !== 'welcome');
     if (realMessages.length < 2) return conv.id ?? null;
 
@@ -63,25 +72,26 @@ export const useChatStore = create((set, get) => ({
         createdAt: now,
         updatedAt: now,
       };
-      // Garder les MAX_CONVERSATIONS les plus récentes
       updated = [newConv, ...conversations].slice(0, MAX_CONVERSATIONS);
     }
 
     set({ conversations: updated });
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(key, JSON.stringify(updated));
     return existing ? conv.id : updated[0].id;
   },
 
-  // ── Supprimer une conversation ─────────────────────────────────────────
-  deleteConversation: async (id) => {
+  // ── Supprimer une conversation ───────────────────────────────────────────
+  deleteConversation: async (id, userId) => {
+    const key = storageKey(userId ?? get().currentUserId);
     const updated = get().conversations.filter((c) => c.id !== id);
     set({ conversations: updated });
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(key, JSON.stringify(updated));
   },
 
-  // ── Effacer tout l'historique ──────────────────────────────────────────
-  clearAll: async () => {
+  // ── Effacer tout l'historique de l'utilisateur courant ──────────────────
+  clearAll: async (userId) => {
+    const key = storageKey(userId ?? get().currentUserId);
     set({ conversations: [] });
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(key);
   },
 }));

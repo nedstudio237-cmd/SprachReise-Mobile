@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, FONTS } from '../../constants/config';
+import { COLORS, FONTS, API_BASE_URL } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 
 const SUBLEVELS = [
@@ -37,12 +37,35 @@ export default function SubLevelScreen({ navigation, route }) {
   const handleFinish = async () => {
     setLoading(true);
     try {
-      // 1. Authentifier d'abord (nécessaire pour avoir user.email dans le store)
-      if (authData) {
-        await setAuth(authData.user, authData.accessToken);
+      let userToStore = authData?.user ?? null;
+
+      // 1. Informer le backend du niveau choisi → il assigne le bon formateur
+      if (authData?.accessToken && level) {
+        const res = await fetch(`${API_BASE_URL}/auth/set-level`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authData.accessToken}`,
+          },
+          body: JSON.stringify({ levelCode: level }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const assignedTrainerId = data.assignedTrainerId && data.assignedTrainerId !== 0
+            ? data.assignedTrainerId : null;
+          userToStore = { ...userToStore, assignedTrainerId };
+        }
       }
-      // 2. Sauvegarder le profil avec la clé namespaced par email
+
+      // 2. Authentifier dans le store
+      if (userToStore) {
+        await setAuth(userToStore, authData.accessToken);
+      }
+
+      // 3. Sauvegarder le profil avec la clé namespaced par email
       await setLearnerProfile(language, level, selected);
+    } catch (e) {
+      Alert.alert('Erreur', 'Impossible de finaliser l\'inscription. Réessayez.');
     } finally {
       setLoading(false);
     }

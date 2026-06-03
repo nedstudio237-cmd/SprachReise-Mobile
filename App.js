@@ -22,14 +22,16 @@ import {
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import AuthStack from './src/navigation/AuthStack';
-import MainStack from './src/navigation/MainStack';
+import AuthStack      from './src/navigation/AuthStack';
+import MainStack      from './src/navigation/MainStack';
 import OnboardingStack from './src/navigation/OnboardingStack';
+import TrainerStack   from './src/navigation/TrainerStack';
+import AdminStack     from './src/navigation/AdminStack';
 import { useAuthStore } from './src/store/authStore';
 import { COLORS } from './src/constants/config';
 
 export default function App() {
-  const { isLoading, accessToken, level, initialize } = useAuthStore();
+  const { isLoading, accessToken, user, level, trainerStatus, initialize } = useAuthStore();
 
   const [fontsLoaded] = useFonts({
     Fraunces_400Regular,
@@ -46,9 +48,7 @@ export default function App() {
     PlusJakartaSans_700Bold,
   });
 
-  useEffect(() => {
-    initialize();
-  }, []);
+  useEffect(() => { initialize(); }, []);
 
   if (isLoading || !fontsLoaded) {
     return (
@@ -58,16 +58,25 @@ export default function App() {
     );
   }
 
+  const renderStack = () => {
+    if (!accessToken) return <AuthStack />;
+
+    const role = user?.role;
+
+    if (role === 'ADMIN') return <AdminStack />;
+
+    if (role === 'TRAINER') return <TrainerStack />;
+
+    // LEARNER
+    if (!level) return <OnboardingStack />;
+    return <MainStack />;
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <NavigationContainer>
-          {!accessToken
-            ? <AuthStack />
-            : !level
-              ? <OnboardingStack />   // connecté mais pas encore de niveau → sélection
-              : <MainStack />
-          }
+          {renderStack()}
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>
